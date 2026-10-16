@@ -22,7 +22,7 @@
   // ---------- form ----------
   function syncDirectionLabels() {
     const dir = form.direction.value;
-    $('#timeLabel').textContent = dir === 'to' ? 'Leaving Stanford at' : 'Landing time';
+    $('#timeLabel').textContent = dir === 'to' ? 'Leaving Stanford at' : 'Leaving the airport at';
     $('#locationLabel').textContent = dir === 'to' ? 'Pickup location' : 'Drop-off location';
   }
   form.addEventListener('change', (e) => {
@@ -274,7 +274,7 @@
       `<div class="ride-meta">${[r.email, r.phone].filter(Boolean).map(esc).join(' · ')}</div>`;
 
     return `<article class="ride${r.type === 'shuttle' ? ' shuttle' : ''}${mine ? ' mine' : ''}" data-id="${esc(r.id)}">
-      <div class="ride-time">${esc(fmtTime(r.time))}<small>${r.direction === 'to' ? 'Leaves' : 'Lands'} · ${esc(r.airport)}</small></div>
+      <div class="ride-time">${esc(fmtTime(r.time))}<small>${r.direction === 'to' ? 'To' : 'From'} ${esc(r.airport)}</small></div>
       <div class="ride-main">
         <div class="ride-name">${esc(r.type === 'shuttle' ? '$5 Shuttle' : r.firstName)} ${badges}</div>
         <div class="ride-meta">${sub}</div>
