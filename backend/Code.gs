@@ -4,23 +4,31 @@
  * Storage: the "Rides" tab of the Google Sheet this script is bound to.
  * Email:   MailApp, sent from the Google account that deploys the web app.
  *
+ * Notifications are opt-in ("Notify me"). Once an hour, on the hour, one email is
+ * BCC'd to every opted-in rider who has a new ride posted within their time window.
+ *
  * Setup (see README.md):
  *   1. Project Settings → Script properties → add ADMIN_PASSWORD (and optionally SITE_URL).
- *   2. Deploy → New deployment → Web app → Execute as: Me, Who has access: Anyone.
- *   3. Paste the /exec URL into js/config.js.
+ *   2. Run setup() once from the editor (creates the sheet and the hourly schedule).
+ *   3. Deploy → New deployment → Web app → Execute as: Me, Who has access: Anyone.
+ *   4. Paste the /exec URL into js/config.js.
  */
 
 const SHEET_NAME = 'Rides';
 const HEADERS = [
   'id', 'createdAt', 'updatedAt', 'type', 'direction', 'date', 'time', 'airport', 'airline',
   'location', 'locationOther', 'firstName', 'email', 'phone', 'notes', 'orderUrl', 'editKey', 'notified',
+  'notify', 'notifyBefore', 'notifyAfter', 'notifySince',
 ];
 const AIRPORTS = ['SFO', 'SJC', 'OAK'];
 const DIRECTIONS = ['to', 'from']; // to = leaving Stanford for the airport, from = returning to Stanford
 const LOCATIONS = [
   'Branner', 'EV', 'FloMo', 'GovCo', 'Lagunita', 'Lower Row', 'Stern', 'Toyon', 'Upper Row', 'Wilbur', 'Other',
 ];
-const MATCH_WINDOW_MIN = 30;
+const NOTIFY_OFFSETS = [0, 15, 30, 45, 60, 90, 120, 180, 240]; // minutes before / after the rider's time
+const DEFAULT_NOTIFY_OFFSET = 60;
+const BCC_BATCH = 50; // recipients per email
+const HOURLY_HANDLER = 'hourlyNotify';
 const TZ = 'America/Los_Angeles';
 const CONTACT_EMAIL = 'sdesai05@stanford.edu';
 
@@ -65,13 +73,14 @@ function route_(req) {
 
     case 'adminLogin':
       requireAdmin_(req.password);
-      return { settings: getSettings_(), quota: MailApp.getRemainingDailyQuota() };
+      return { settings: getSettings_(), quota: MailApp.getRemainingDailyQuota(), nextRun: nextRunLabel_() };
     case 'adminList':
       requireAdmin_(req.password);
       return {
         rides: readRides_().map(adminRide_),
         settings: getSettings_(),
         quota: MailApp.getRemainingDailyQuota(),
+        nextRun: nextRunLabel_(),
       };
     case 'adminAddShuttle':
       requireAdmin_(req.password);
@@ -81,10 +90,12 @@ function route_(req) {
       return withLock_(() => ({ removed: deleteById_(req.id) }));
     case 'adminSendMatches':
       requireAdmin_(req.password);
-      return withLock_(() => sendMatchEmails_(null));
+      return withLock_(() => sendMatchEmails_());
     case 'adminSettings':
       requireAdmin_(req.password);
-      return { settings: saveSettings_(req.settings || {}) };
+      const settings = saveSettings_(req.settings || {});
+      if (settings.autoNotify) scheduleNextRun_();
+      return { settings, nextRun: nextRunLabel_() };
     default:
       throw new Error('Unknown action.');
   }
@@ -135,6 +146,8 @@ function sheet_() {
     sh = ss.insertSheet(SHEET_NAME);
     sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold');
     sh.setFrozenRows(1);
+  } else if (sh.getRange(1, 1, 1, HEADERS.length).getDisplayValues()[0].join() !== HEADERS.join()) {
+    sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold'); // new columns
   }
   return sh;
 }
@@ -180,11 +193,9 @@ function addRide_(input) {
   ride.type = 'rider';
   ride.editKey = Utilities.getUuid();
   ride.notified = '';
+  ride.notifySince = ride.createdAt;
   appendRide_(ride);
-
-  let emailed = 0;
-  if (getSettings_().autoNotify) emailed = sendMatchEmails_(ride.id).emailsSent;
-  return { ride: publicRide_(ride), editKey: ride.editKey, emailed };
+  return { ride: publicRide_(ride), editKey: ride.editKey };
 }
 
 function updateRide_(id, editKey, input) {
@@ -193,16 +204,14 @@ function updateRide_(id, editKey, input) {
     throw new Error('Ride not found or you do not have permission to edit it.');
   }
   const ride = validateRide_(input);
-  const tripChanged = ['direction', 'date', 'time', 'airport'].some((k) => ride[k] !== existing[k]);
-  Object.assign(existing, ride, {
-    updatedAt: new Date().toISOString(),
-    notified: tripChanged ? '' : existing.notified,
-  });
+  const now = new Date().toISOString();
+  // A new trip time or window (or turning alerts on) only alerts about rides posted from now on.
+  const resetAlerts = ['direction', 'date', 'time', 'airport', 'notifyBefore', 'notifyAfter'].some((k) => ride[k] !== existing[k]) ||
+    (ride.notify === 'yes' && existing.notify !== 'yes');
+  Object.assign(existing, ride, { updatedAt: now });
+  if (resetAlerts) Object.assign(existing, { notified: '', notifySince: now });
   writeRow_(existing._row, existing);
-
-  let emailed = 0;
-  if (tripChanged && getSettings_().autoNotify) emailed = sendMatchEmails_(existing.id).emailsSent;
-  return { ride: publicRide_(existing), emailed };
+  return { ride: publicRide_(existing) };
 }
 
 function removeOwnRide_(id, editKey) {
@@ -235,10 +244,7 @@ function addShuttle_(input) {
   shuttle.editKey = '';
   shuttle.notified = '';
   appendRide_(shuttle);
-
-  let emailed = 0;
-  if (getSettings_().autoNotify) emailed = sendMatchEmails_(shuttle.id).emailsSent;
-  return { ride: publicRide_(shuttle), emailed };
+  return { ride: publicRide_(shuttle) };
 }
 
 function validateRide_(input) {
@@ -262,7 +268,14 @@ function validateRide_(input) {
     phone,
     notes: '',
     orderUrl: '',
+    notify: email && (r.notify === true || r.notify === 'yes') ? 'yes' : '',
+    notifyBefore: offset_(r.notifyBefore),
+    notifyAfter: offset_(r.notifyAfter),
   };
+}
+
+function offset_(v) {
+  return String(NOTIFY_OFFSETS.indexOf(Number(v)) === -1 ? DEFAULT_NOTIFY_OFFSET : Number(v));
 }
 
 function oneOf_(v, list, label) {
@@ -300,6 +313,7 @@ function publicRide_(r) {
     id: r.id, type: r.type, direction: r.direction, date: r.date, time: r.time, airport: r.airport,
     airline: r.airline, location: r.location, locationOther: r.locationOther, firstName: r.firstName,
     email: r.email, phone: r.phone, notes: r.notes, orderUrl: r.orderUrl, createdAt: r.createdAt,
+    notify: r.notify === 'yes', notifyBefore: Number(offset_(r.notifyBefore)), notifyAfter: Number(offset_(r.notifyAfter)),
   };
 }
 
@@ -328,97 +342,107 @@ function isUpcoming_(r) {
 
 // ---------- Matching & email ----------
 
-function isMatch_(a, b) {
-  return a.id !== b.id && a.direction === b.direction && a.airport === b.airport &&
-    Math.abs(minutes_(a) - minutes_(b)) <= MATCH_WINDOW_MIN;
+/** Is `other` a new ride inside `rider`'s alert window that they haven't been told about? */
+function isNewMatchFor_(rider, other) {
+  if (other.id === rider.id || other.direction !== rider.direction || other.airport !== rider.airport) return false;
+  const diff = minutes_(other) - minutes_(rider); // negative = earlier than the rider
+  if (diff < -Number(offset_(rider.notifyBefore)) || diff > Number(offset_(rider.notifyAfter))) return false;
+  if ((other.updatedAt || other.createdAt) <= (rider.notifySince || rider.createdAt)) return false;
+  return (rider.notified ? rider.notified.split(',') : []).indexOf(other.id) === -1;
 }
 
 /**
- * Emails every rider who has new matches they haven't been told about yet.
- * If focusId is given, only riders involved with that ride are considered
- * (the ride itself plus everyone it matches).
+ * Finds every opted-in rider with at least one new match and sends one generic
+ * "check it out" email BCC'd to all of them (in batches of BCC_BATCH).
  */
-function sendMatchEmails_(focusId) {
+function sendMatchEmails_() {
   const rides = readRides_().filter(isUpcoming_);
-  let candidates = rides.filter((r) => r.type === 'rider' && r.email);
-  if (focusId) {
-    const focus = rides.find((r) => r.id === focusId);
-    if (!focus) return { emailsSent: 0, ridersWithMatches: 0 };
-    candidates = candidates.filter((r) => r.id === focusId || isMatch_(r, focus));
-  }
+  const subscribers = rides.filter((r) => r.type === 'rider' && r.notify === 'yes' && r.email);
+  const toNotify = [];
+  subscribers.forEach((rider) => {
+    const fresh = rides.filter((o) => isNewMatchFor_(rider, o));
+    if (fresh.length) toNotify.push({ rider, fresh });
+  });
 
-  let emailsSent = 0;
-  let ridersWithMatches = 0;
+  // Each BCC recipient counts against the daily quota, so only send what fits.
   let quota = MailApp.getRemainingDailyQuota();
+  const sending = toNotify.slice(0, Math.max(0, quota - 1)); // -1 for the visible "to" copy
+  const emails = Array.from(new Set(sending.map((x) => x.rider.email)));
+  const self = Session.getEffectiveUser().getEmail() || CONTACT_EMAIL;
 
-  candidates.forEach((rider) => {
-    const already = rider.notified ? rider.notified.split(',') : [];
-    const fresh = rides.filter((o) => isMatch_(rider, o) && already.indexOf(o.id) === -1);
-    if (!fresh.length) return;
-    ridersWithMatches++;
-    if (quota < 1) return;
-
+  for (let i = 0; i < emails.length; i += BCC_BATCH) {
     MailApp.sendEmail({
-      to: rider.email,
-      subject: 'Cardinal Carpool: ' + (fresh.length === 1 ? 'a ride match' : fresh.length + ' ride matches') +
-        ' for your ' + rider.airport + ' trip',
-      htmlBody: matchEmailHtml_(rider, fresh),
+      to: self,
+      bcc: emails.slice(i, i + BCC_BATCH).join(','),
+      subject: 'You have a new ride match on Cardinal Carpool 🚗',
+      htmlBody: matchEmailHtml_(),
       name: 'Cardinal Carpool',
       replyTo: CONTACT_EMAIL,
     });
-    quota--;
-    emailsSent++;
+  }
+
+  sending.forEach(({ rider, fresh }) => {
+    const already = rider.notified ? rider.notified.split(',') : [];
     rider.notified = already.concat(fresh.map((o) => o.id)).filter(Boolean).join(',');
     writeRow_(rider._row, rider);
   });
 
-  return { emailsSent, ridersWithMatches, quotaLeft: quota };
+  return {
+    emailsSent: Math.ceil(emails.length / BCC_BATCH),
+    recipients: emails.length,
+    ridersWithMatches: toNotify.length,
+    subscribers: subscribers.length,
+    quotaLeft: MailApp.getRemainingDailyQuota(),
+  };
 }
 
-function matchEmailHtml_(rider, matches) {
+function matchEmailHtml_() {
   const site = getSettings_().siteUrl;
-  const dirLabel = rider.direction === 'to' ? 'Stanford → ' + rider.airport : rider.airport + ' → Stanford';
-  const rows = matches.map((m) => {
-    const where = m.location === 'Other' ? m.locationOther : m.location;
-    if (m.type === 'shuttle') {
-      return '<tr><td style="padding:12px;border-bottom:1px solid #eee">' +
-        '<strong style="color:#8C1515">$5 SSS Shuttle</strong> at ' + esc_(fmtTime_(m.time)) +
-        '<br>' + (m.direction === 'to' ? 'Pickup' : 'Drop-off') + ': ' + esc_(where) +
-        (m.notes ? '<br>' + esc_(m.notes) : '') +
-        (m.orderUrl ? '<br><a href="' + esc_(m.orderUrl) + '" style="color:#8C1515;font-weight:bold">Reserve a seat →</a>' : '') +
-        '</td></tr>';
-    }
-    const contact = [
-      m.email ? '<a href="mailto:' + esc_(m.email) + '">' + esc_(m.email) + '</a>' : '',
-      m.phone ? '<a href="sms:' + esc_(m.phone.replace(/[^0-9+]/g, '')) + '">' + esc_(m.phone) + '</a>' : '',
-    ].filter(Boolean).join(' · ');
-    return '<tr><td style="padding:12px;border-bottom:1px solid #eee">' +
-      '<strong>' + esc_(m.firstName) + '</strong> at ' + esc_(fmtTime_(m.time)) +
-      ' (' + esc_(m.airline) + ')<br>' + (m.direction === 'to' ? 'Leaving from' : 'Heading to') + ': ' +
-      esc_(where) + '<br>' + contact + '</td></tr>';
-  }).join('');
-
-  return '<div style="font-family:Helvetica,Arial,sans-serif;max-width:560px;margin:auto;color:#222">' +
+  return '<div style="font-family:Helvetica,Arial,sans-serif;max-width:560px;margin:auto;color:#2e2d29">' +
     '<h2 style="color:#8C1515;margin-bottom:4px">Cardinal Carpool</h2>' +
-    '<p>Hi ' + esc_(rider.firstName) + ', good news! We found ' +
-    (matches.length === 1 ? 'a ride' : matches.length + ' rides') + ' within ' + MATCH_WINDOW_MIN +
-    ' minutes of your trip <strong>' + esc_(dirLabel) + '</strong> on ' + esc_(fmtDate_(rider.date)) +
-    ' at ' + esc_(fmtTime_(rider.time)) + '.</p>' +
-    '<table style="width:100%;border-collapse:collapse;background:#fafafa">' + rows + '</table>' +
-    '<p>Reach out to coordinate. Splitting an Uber/Lyft saves everyone money.</p>' +
-    (site ? '<p><a href="' + esc_(site) + '" style="color:#8C1515">Open Cardinal Carpool</a></p>' : '') +
+    '<p>Good news! Someone new posted a ride within the time window you picked for your airport trip.</p>' +
+    '<p>Check it out and reach out to coordinate. Splitting an Uber or Lyft saves everyone money.</p>' +
+    (site ? '<p><a href="' + esc_(site) + '" style="display:inline-block;background:#8C1515;color:#fff;' +
+      'padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold">See your matches →</a></p>' : '') +
+    '<p style="color:#53565a;font-size:13px">You\'re getting this because you turned on "Notify me" for a ride. ' +
+    'To stop, edit your ride on Cardinal Carpool and turn it off.</p>' +
     '<p style="color:#888;font-size:12px">Made by Samuel for SSS · Questions? ' +
     '<a href="mailto:' + CONTACT_EMAIL + '">' + CONTACT_EMAIL + '</a></p></div>';
 }
 
-function fmtTime_(t) {
-  const [h, m] = t.split(':').map(Number);
-  return ((h + 11) % 12 + 1) + ':' + String(m).padStart(2, '0') + (h < 12 ? ' AM' : ' PM');
+// ---------- Hourly schedule ----------
+
+/** Runs at the top of every hour; always books the next run, even if sending fails. */
+function hourlyNotify() {
+  try {
+    if (getSettings_().autoNotify) withLock_(() => sendMatchEmails_());
+  } finally {
+    scheduleNextRun_();
+  }
 }
 
-function fmtDate_(d) {
-  const [y, m, day] = d.split('-');
-  return m + '/' + day + '/' + y;
+/** One-off trigger at the next :00. (Apps Script's "every hour" triggers don't fire on the hour.) */
+function scheduleNextRun_() {
+  ScriptApp.getProjectTriggers()
+    .filter((t) => t.getHandlerFunction() === HOURLY_HANDLER)
+    .forEach((t) => ScriptApp.deleteTrigger(t));
+  const next = new Date();
+  next.setMinutes(0, 0, 0);
+  next.setHours(next.getHours() + 1);
+  ScriptApp.newTrigger(HOURLY_HANDLER).timeBased().at(next).create();
+  PropertiesService.getScriptProperties().setProperty('NEXT_RUN', next.toISOString());
+}
+
+/** Safety net (every 6 hours): restarts the hourly chain if it ever broke. */
+function ensureSchedule() {
+  const hasNext = ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === HOURLY_HANDLER);
+  const next = PropertiesService.getScriptProperties().getProperty('NEXT_RUN');
+  if (!hasNext || !next || new Date(next) < new Date(Date.now() - 10 * 60000)) scheduleNextRun_();
+}
+
+function nextRunLabel_() {
+  const next = PropertiesService.getScriptProperties().getProperty('NEXT_RUN');
+  return next && new Date(next) > new Date() ? Utilities.formatDate(new Date(next), TZ, 'h:mm a') : '';
 }
 
 function esc_(s) {
@@ -427,8 +451,14 @@ function esc_(s) {
   ));
 }
 
-/** Optional: run once from the editor to create the sheet tab and authorize MailApp. */
+/** Run once from the editor: creates the sheet tab, authorizes email, and starts the hourly schedule. */
 function setup() {
   sheet_();
-  Logger.log('Sheet ready. Remaining email quota today: ' + MailApp.getRemainingDailyQuota());
+  ScriptApp.getProjectTriggers()
+    .filter((t) => t.getHandlerFunction() === 'ensureSchedule')
+    .forEach((t) => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('ensureSchedule').timeBased().everyHours(6).create();
+  scheduleNextRun_();
+  Logger.log('Ready. Next email run: ' + nextRunLabel_() + '. Email quota left today: ' +
+    MailApp.getRemainingDailyQuota());
 }

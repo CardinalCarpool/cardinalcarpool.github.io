@@ -64,13 +64,13 @@
         <div>
           <section class="card">
             <h2>Email notifications</h2>
-            <p class="sub">Riders with the same airport and direction within 30 minutes of each other get an email (once per match).</p>
+            <p class="sub">Only riders who turned on <strong>Notify me</strong> get emails. At the top of every hour, one email is BCC'd to everyone who has a new ride posted inside their chosen time window. It just tells them to come check the site.</p>
             <div class="toggle">
               <div>
-                <strong>Automatic emails</strong>
-                <div class="count">Send match emails as soon as a ride or shuttle is posted.</div>
+                <strong>Hourly match emails</strong>
+                <div class="count" id="nextRun">Sent on the hour, every hour.</div>
               </div>
-              <label class="switch"><input type="checkbox" id="autoNotify" aria-label="Automatic emails"><span></span></label>
+              <label class="switch"><input type="checkbox" id="autoNotify" aria-label="Hourly match emails"><span></span></label>
             </div>
             <div class="field" style="margin-top:14px">
               <label for="siteUrl">Website link used in emails</label>

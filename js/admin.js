@@ -23,7 +23,7 @@
     $('#loginCard').hidden = true;
     $('#dash').hidden = false;
     $('#logout').hidden = false;
-    applySettings(res.settings, res.quota);
+    applySettings(res.settings, res.quota, res.nextRun);
     await refresh();
   }
 
@@ -47,7 +47,11 @@
   });
 
   // ---------- settings ----------
-  function applySettings(settings, quota) {
+  function applySettings(settings, quota, nextRun) {
+    if (settings && nextRun !== undefined) {
+      $('#nextRun').textContent = !settings.autoNotify ? 'Paused: no emails will be sent.'
+        : nextRun ? `On. Next send: ${nextRun}.` : 'On. Sent on the hour, every hour.';
+    }
     if (settings) {
       $('#autoNotify').checked = !!settings.autoNotify;
       $('#siteUrl').value = settings.siteUrl || '';
@@ -58,8 +62,8 @@
   $('#autoNotify').addEventListener('change', async (e) => {
     try {
       const res = await admin('adminSettings', { settings: { autoNotify: e.target.checked } });
-      applySettings(res.settings);
-      toast(`Automatic emails ${res.settings.autoNotify ? 'on' : 'off'}.`);
+      applySettings(res.settings, null, res.nextRun || '');
+      toast(`Hourly emails ${res.settings.autoNotify ? 'on' : 'paused'}.`);
     } catch (ex) {
       e.target.checked = !e.target.checked;
       toast(ex.message, true);
@@ -82,11 +86,11 @@
     btn.textContent = 'Sending…';
     try {
       const res = await admin('adminSendMatches');
-      $('#sendResult').textContent = res.emailsSent
-        ? `Sent ${res.emailsSent} email${res.emailsSent === 1 ? '' : 's'}.`
-        : 'No new matches to email. Everyone is up to date.';
-      if (res.ridersWithMatches > res.emailsSent) {
-        $('#sendResult').textContent += ` ${res.ridersWithMatches - res.emailsSent} skipped: daily email limit reached.`;
+      $('#sendResult').textContent = res.recipients
+        ? `Emailed ${res.recipients} rider${res.recipients === 1 ? '' : 's'} (BCC).`
+        : `No new matches to email. ${res.subscribers} rider${res.subscribers === 1 ? ' has' : 's have'} Notify me on.`;
+      if (res.ridersWithMatches > res.recipients) {
+        $('#sendResult').textContent += ` ${res.ridersWithMatches - res.recipients} waiting: daily email limit reached.`;
       }
       if (res.quotaLeft != null) $('#statQuota').textContent = res.quotaLeft;
       await refresh();
@@ -129,7 +133,7 @@
     btn.disabled = true;
     try {
       const res = await admin('adminAddShuttle', { shuttle });
-      toast(res.emailed ? `Shuttle added. Emailed ${res.emailed} matching rider${res.emailed === 1 ? '' : 's'}.` : 'Shuttle added.');
+      toast('Shuttle added. Riders nearby with Notify me on will hear about it at the top of the hour.');
       sForm.reset();
       $('#sOtherField').hidden = true;
       await refresh();
@@ -144,7 +148,7 @@
   async function refresh() {
     const res = await admin('adminList');
     rides = res.rides || [];
-    applySettings(res.settings, res.quota);
+    applySettings(res.settings, res.quota, res.nextRun);
     render();
   }
 
@@ -164,7 +168,7 @@
       const trip = r.direction === 'to' ? `Stanford → ${r.airport}` : `${r.airport} → Stanford`;
       const who = r.type === 'shuttle'
         ? '<span class="badge badge-shuttle">$5 Shuttle</span>'
-        : `${esc(r.firstName)}<div class="count">${esc(r.airline)}</div>`;
+        : `${esc(r.firstName)}${r.notify ? ` <span title="Notify me: ${r.notifyBefore} min before to ${r.notifyAfter} min after">🔔</span>` : ''}<div class="count">${esc(r.airline)}</div>`;
       const contact = r.type === 'shuttle'
         ? (r.orderUrl ? `<a href="${esc(r.orderUrl)}" target="_blank" rel="noopener">Order form</a>` : '') +
           (r.notes ? `<div class="count">${esc(r.notes)}</div>` : '')
