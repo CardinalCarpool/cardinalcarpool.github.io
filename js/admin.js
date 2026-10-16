@@ -1,7 +1,7 @@
 // Admin dashboard. The password is checked by the backend on every request;
 // it is kept in sessionStorage only for this tab so you don't retype it.
 (function () {
-  const { DEMO, esc, minutesOf, fmtTime, isoToMDY, mdyToIso, nowMinutes, todayIso, placeOf, call } = window.CC;
+  const { DEMO, esc, minutesOf, fmtTime, isoToMDY, mdyToIso, nowMinutes, todayIso, placeOf, isMatch, call } = window.CC;
   const { toast, initDateField, fillLocations } = window.UI;
   const $ = (sel) => document.querySelector(sel);
   const PW_KEY = 'cc_admin_pw';
@@ -126,6 +126,82 @@
     }).join('');
   }
   $('#showPast').addEventListener('change', render);
+
+  // ---------- CSV exports (built here from the loaded rides) ----------
+  const EXPORT_WINDOW = { before: 30, after: 30 };
+
+  function csvCell(v) {
+    let s = String(v == null ? '' : v);
+    // Keep spreadsheets from treating text as a formula (phone numbers like +1 650… are fine).
+    if (/^[=+\-@]/.test(s) && !/^\+?[\d\s().-]+$/.test(s)) s = "'" + s;
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }
+
+  function downloadCsv(name, header, rows) {
+    const text = [header, ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n');
+    const blob = new Blob(['\ufeff' + text], { type: 'text/csv;charset=utf-8' }); // BOM so Excel reads UTF-8
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${name}-${todayIso()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  const upcomingRides = () => rides.filter((r) => minutesOf(r) >= nowMinutes() - 60);
+  const tripLabel = (r) => (r.direction === 'to' ? 'Leaving Stanford' : 'Returning to Stanford');
+  const offsetText = (diff) => (diff === 0 ? 'at the same time'
+    : `${Math.abs(diff)} minute${Math.abs(diff) === 1 ? '' : 's'} ${diff < 0 ? 'before' : 'after'}`);
+
+  $('#exportEmails').addEventListener('click', () => {
+    const byEmail = new Map();
+    upcomingRides()
+      .filter((r) => r.type === 'rider' && r.email)
+      .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
+      .forEach((r) => {
+        const key = r.email.toLowerCase();
+        const row = byEmail.get(key) || { firstName: r.firstName, email: r.email, trips: 0 };
+        row.firstName = r.firstName; // most recent name wins
+        row.trips++;
+        byEmail.set(key, row);
+      });
+    const rows = [...byEmail.values()].map((r) => [r.firstName, r.email, r.trips]);
+    if (!rows.length) { $('#exportResult').textContent = 'No emails to export yet.'; return; }
+    downloadCsv('cardinal-carpool-emails', ['First Name', 'Email', 'Trips'], rows);
+    $('#exportResult').textContent = `Exported ${rows.length} email${rows.length === 1 ? '' : 's'}.`;
+  });
+
+  $('#exportMatches').addEventListener('click', () => {
+    const list = upcomingRides();
+    const rows = [];
+    list
+      .filter((r) => r.type === 'rider' && r.email)
+      .sort((a, b) => minutesOf(a) - minutesOf(b))
+      .forEach((me) => {
+        const matches = list
+          .filter((o) => isMatch(me, o, EXPORT_WINDOW) && (o.type === 'shuttle' || o.email !== me.email))
+          .sort((a, b) => minutesOf(a) - minutesOf(b));
+        if (!matches.length) return;
+        const first = matches[0]; // soonest (earliest) match
+        const diff = minutesOf(first) - minutesOf(me);
+        rows.push([
+          me.firstName, me.email, tripLabel(me), me.airport, isoToMDY(me.date), fmtTime(me.time), placeOf(me),
+          matches.length,
+          offsetText(diff),
+          first.type === 'shuttle' ? '$5 Shuttle' : first.firstName,
+          fmtTime(first.time),
+          first.type === 'shuttle' ? (first.orderUrl || '') : [first.email, first.phone].filter(Boolean).join(' / '),
+          matches.map((m) => `${m.type === 'shuttle' ? '$5 Shuttle' : m.firstName} (${fmtTime(m.time)}, ${offsetText(minutesOf(m) - minutesOf(me))})`).join('; '),
+        ]);
+      });
+    if (!rows.length) { $('#exportResult').textContent = 'No riders with a match within ±30 minutes yet.'; return; }
+    downloadCsv('cardinal-carpool-matches', [
+      'First Name', 'Email', 'Trip', 'Airport', 'Date', 'Time', 'Pickup/Drop-off',
+      'Match Count', 'Soonest Match Offset', 'Soonest Match Name', 'Soonest Match Time', 'Soonest Match Contact', 'All Matches',
+    ], rows);
+    $('#exportResult').textContent = `Exported ${rows.length} trip${rows.length === 1 ? '' : 's'} with a match.`;
+  });
 
   $('#rideRows').addEventListener('click', async (e) => {
     const del = e.target.closest('[data-del]');

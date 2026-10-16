@@ -117,6 +117,16 @@
               <p class="form-error" id="shuttleError" role="alert"></p>
             </form>
           </section>
+
+          <section class="card section-gap">
+            <h2>Export</h2>
+            <p class="sub">Download CSVs for a mail merge (Gmail, Outlook, Word, YAMM, etc.). Only upcoming rides are included.</p>
+            <button class="btn btn-ghost btn-block" type="button" id="exportEmails">Export all emails (.csv)</button>
+            <p class="count" style="margin:6px 0 14px">One row per email address, with first name and number of trips.</p>
+            <button class="btn btn-primary btn-block" type="button" id="exportMatches">Export riders with a match (.csv)</button>
+            <p class="count" style="margin:6px 0 0">One row per trip that has another rider or shuttle to the <strong>same airport</strong>, same direction, within <strong>±30 min</strong>. The closest match is described like "15 minutes before" or "10 minutes after".</p>
+            <p class="count" id="exportResult" style="margin:8px 0 0"></p>
+          </section>
         </div>
 
         <section class="card">

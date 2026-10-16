@@ -6,7 +6,7 @@ Find a Stanford student to share a ride to or from **SFO, SJC, or OAK**.
 - Everyone can filter rides by direction, airport, date (MM/DD/YYYY), dorm, and a time-of-day slider.
 - **Your matches** at the top of the page lists, for each trip you posted, the rides and shuttles going the same direction to the same airport within your match window. The default window is 1 hour before to 15 minutes after your time, adjustable up to 4.5 hours each way. The window is saved only in your browser.
 - People can **edit or remove their own ride** from the same browser (an edit key is stored in `localStorage`).
-- **Admin dashboard** (`/admin.html`): add **$5 shuttles** with an order-form link and delete rides.
+- **Admin dashboard** (`/admin.html`): add **$5 shuttles** with an order-form link, delete rides, and export CSVs for a mail merge: all emails, or every trip with a match to the same airport and direction within ±30 minutes. That file includes the soonest match's offset, like "10 minutes after".
 - "Share the website" by text, email, the phone's share sheet, or a copied link.
 - Uses the Stanford identity palette (Cardinal Red, White, Process Black, plus accent colors) and Stanford's typefaces (Source Sans 3 and Source Serif 4).
 - A few Easter eggs. 🌲
