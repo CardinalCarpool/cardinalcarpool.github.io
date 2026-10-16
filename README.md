@@ -5,7 +5,7 @@ Find a Stanford student to share a ride to or from **SFO, SJC, or OAK**.
 - Students post their trip. They can check **Leaving Stanford**, **Returning to Stanford**, or both, and each trip gets its own airport, date, time, and airline. They also give a pickup/drop-off dorm, first name, and email and/or phone.
 - Everyone can filter rides by direction, airport, date (MM/DD/YYYY), dorm, and a time-of-day slider. **Show matches** jumps to rides within ±1 hour of your trip.
 - People can **edit or remove their own ride** from the same browser (an edit key is stored in `localStorage`).
-- **Notify me** (opt-in, needs an email): riders pick how far **before** and **after** their time they care about. They're only alerted about rides posted *after* they signed up.
+- **Notify me** (opt-in, needs an email): on by default once an email is entered. Riders pick how far **before** (default 1 hour) and **after** (default 15 min) their time they care about, up to 4.5 hours each way. They're only alerted about rides posted *after* they signed up.
 - **Hourly emails**: at the top of every hour, one "you have a new match, check it out" email is BCC'd to every opted-in rider with a new match. Each match triggers at most one alert.
 - **Admin dashboard** (`/admin.html`): add **$5 shuttles** with an order-form link, delete rides, pause or resume hourly emails, and send them on demand.
 - "Share the website" by text, email, the phone's share sheet, or a copied link.

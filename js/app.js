@@ -34,10 +34,12 @@
       : dirs[0] === 'from' ? 'Drop-off location' : 'Pickup location';
     if (!editingId) $('#submitBtn').textContent = dirs.length === 2 ? 'Add my 2 rides' : 'Add my ride';
   }
+  // On by default; remembers the rider's choice while the box is disabled for lack of an email.
+  let notifyWanted = true;
   function syncNotify() {
     const hasEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.value.trim());
     form.notify.disabled = !hasEmail;
-    if (!hasEmail) form.notify.checked = false;
+    form.notify.checked = hasEmail && notifyWanted;
     $('#notifyWindowRow').hidden = !form.notify.checked;
     $('#notifyHint').textContent = !hasEmail
       ? 'Add an email above to turn this on. Alerts go out at the top of each hour.'
@@ -47,7 +49,7 @@
   }
   form.email.addEventListener('input', syncNotify);
   form.addEventListener('change', (e) => {
-    if (e.target.name === 'notify') syncNotify();
+    if (e.target.name === 'notify') { notifyWanted = form.notify.checked; syncNotify(); }
     if (e.target.name === 'dir') {
       if (!checkedDirs().length) e.target.checked = true; // keep at least one
       syncDirections();
@@ -114,9 +116,9 @@
     form.firstName.value = r.firstName;
     form.email.value = r.email || '';
     form.phone.value = r.phone || '';
-    form.notify.checked = !!r.notify;
+    notifyWanted = !!r.notify;
     form.notifyBefore.value = String(r.notifyBefore != null ? r.notifyBefore : 60);
-    form.notifyAfter.value = String(r.notifyAfter != null ? r.notifyAfter : 60);
+    form.notifyAfter.value = String(r.notifyAfter != null ? r.notifyAfter : 15);
     syncDirections();
     syncNotify();
   }
@@ -145,6 +147,7 @@
     editingId = null;
     const keep = { firstName: form.firstName.value, email: form.email.value, phone: form.phone.value };
     form.reset();
+    notifyWanted = true;
     DIRS.forEach((d) => { dirBox(d).disabled = false; });
     form.firstName.value = keep.firstName;
     form.email.value = keep.email;

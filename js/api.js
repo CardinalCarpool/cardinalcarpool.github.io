@@ -9,8 +9,8 @@
     'Air Canada', 'Air France', 'British Airways', 'Emirates', 'Japan Airlines', 'Lufthansa', 'Qantas',
   ];
   const MATCH_WINDOW_MIN = 60; // "Show matches" and the "near your trip" badge: ±1 hour
-  const NOTIFY_OFFSETS = [0, 15, 30, 45, 60, 90, 120, 180, 240]; // minutes before / after
-  const DEFAULT_NOTIFY_OFFSET = 60;
+  const NOTIFY_OFFSETS = [0, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270]; // minutes before / after
+  const DEFAULT_NOTIFY = { notifyBefore: 60, notifyAfter: 15 };
   const CONTACT_EMAIL = 'sdesai05@stanford.edu';
 
   const API_URL = (window.CC_CONFIG && window.CC_CONFIG.API_URL || '').trim();
@@ -123,7 +123,7 @@
     if (!r.firstName) throw new Error('Please enter your first name.');
     r.notify = !!(r.email && r.notify);
     ['notifyBefore', 'notifyAfter'].forEach((k) => {
-      r[k] = NOTIFY_OFFSETS.includes(Number(r[k])) ? Number(r[k]) : DEFAULT_NOTIFY_OFFSET;
+      r[k] = NOTIFY_OFFSETS.includes(Number(r[k])) ? Number(r[k]) : DEFAULT_NOTIFY[k];
     });
     return r;
   }
@@ -228,7 +228,7 @@
   const call = (payload) => (DEMO ? demo(payload) : remote(payload));
 
   window.CC = {
-    AIRPORTS, LOCATIONS, AIRLINES, MATCH_WINDOW_MIN, NOTIFY_OFFSETS, DEFAULT_NOTIFY_OFFSET, CONTACT_EMAIL, DEMO,
+    AIRPORTS, LOCATIONS, AIRLINES, MATCH_WINDOW_MIN, NOTIFY_OFFSETS, DEFAULT_NOTIFY, CONTACT_EMAIL, DEMO,
     esc, pad, minutesOf, fmtTime, fmtMinutes, isoToMDY, mdyToIso, fmtDateLong, nowMinutes, todayIso,
     isMatch, placeOf, myRides, call,
   };

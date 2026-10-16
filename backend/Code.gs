@@ -25,8 +25,9 @@ const DIRECTIONS = ['to', 'from']; // to = leaving Stanford for the airport, fro
 const LOCATIONS = [
   'Branner', 'EV', 'FloMo', 'GovCo', 'Lagunita', 'Lower Row', 'Stern', 'Toyon', 'Upper Row', 'Wilbur', 'Other',
 ];
-const NOTIFY_OFFSETS = [0, 15, 30, 45, 60, 90, 120, 180, 240]; // minutes before / after the rider's time
-const DEFAULT_NOTIFY_OFFSET = 60;
+const NOTIFY_OFFSETS = [0, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270]; // minutes before / after the rider's time
+const DEFAULT_NOTIFY_BEFORE = 60;
+const DEFAULT_NOTIFY_AFTER = 15;
 const BCC_BATCH = 50; // recipients per email
 const HOURLY_HANDLER = 'hourlyNotify';
 const TZ = 'America/Los_Angeles';
@@ -269,13 +270,13 @@ function validateRide_(input) {
     notes: '',
     orderUrl: '',
     notify: email && (r.notify === true || r.notify === 'yes') ? 'yes' : '',
-    notifyBefore: offset_(r.notifyBefore),
-    notifyAfter: offset_(r.notifyAfter),
+    notifyBefore: offset_(r.notifyBefore, DEFAULT_NOTIFY_BEFORE),
+    notifyAfter: offset_(r.notifyAfter, DEFAULT_NOTIFY_AFTER),
   };
 }
 
-function offset_(v) {
-  return String(NOTIFY_OFFSETS.indexOf(Number(v)) === -1 ? DEFAULT_NOTIFY_OFFSET : Number(v));
+function offset_(v, fallback) {
+  return String(NOTIFY_OFFSETS.indexOf(Number(v)) === -1 ? fallback : Number(v));
 }
 
 function oneOf_(v, list, label) {
@@ -319,7 +320,8 @@ function publicRide_(r) {
 /** What the poster gets back about their own ride: public fields plus their private alert settings. */
 function ownRide_(r) {
   return Object.assign(publicRide_(r), {
-    notify: r.notify === 'yes', notifyBefore: Number(offset_(r.notifyBefore)), notifyAfter: Number(offset_(r.notifyAfter)),
+    notify: r.notify === 'yes', notifyBefore: Number(offset_(r.notifyBefore, DEFAULT_NOTIFY_BEFORE)),
+    notifyAfter: Number(offset_(r.notifyAfter, DEFAULT_NOTIFY_AFTER)),
   });
 }
 
@@ -352,7 +354,8 @@ function isUpcoming_(r) {
 function isNewMatchFor_(rider, other) {
   if (other.id === rider.id || other.direction !== rider.direction || other.airport !== rider.airport) return false;
   const diff = minutes_(other) - minutes_(rider); // negative = earlier than the rider
-  if (diff < -Number(offset_(rider.notifyBefore)) || diff > Number(offset_(rider.notifyAfter))) return false;
+  if (diff < -Number(offset_(rider.notifyBefore, DEFAULT_NOTIFY_BEFORE)) ||
+    diff > Number(offset_(rider.notifyAfter, DEFAULT_NOTIFY_AFTER))) return false;
   if ((other.updatedAt || other.createdAt) <= (rider.notifySince || rider.createdAt)) return false;
   return (rider.notified ? rider.notified.split(',') : []).indexOf(other.id) === -1;
 }
