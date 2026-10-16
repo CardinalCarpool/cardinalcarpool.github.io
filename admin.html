@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Carpool Admin</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#8c1515">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%238c1515'/><text x='50' y='68' font-size='56' text-anchor='middle'>🚗</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand-row">
+        <a class="brand" href="./">
+          <span class="logo" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h-2v-5l2-5h12l3 5h1v5h-2"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/><path d="M9.5 17h5M5 12h15"/></svg>
+          </span>
+          <div>
+            <h1>Cardinal Carpool</h1>
+            <small>Admin dashboard</small>
+          </div>
+        </a>
+        <div class="header-actions">
+          <a class="btn btn-light btn-sm" href="./">View site</a>
+          <button class="btn btn-light btn-sm" type="button" id="logout" hidden>Log out</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div id="demoNote" class="demo-note" hidden>
+      <strong>Demo mode:</strong> no backend is connected, so data lives in this browser and emails are only logged to the console.
+    </div>
+
+    <!-- Login -->
+    <section class="card login-card" id="loginCard">
+      <h2>Admin login</h2>
+      <p class="sub">Enter the admin password to manage rides and shuttles.</p>
+      <form id="loginForm">
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" autocomplete="current-password" required>
+        </div>
+        <button class="btn btn-primary btn-block" type="submit">Log in</button>
+        <p class="form-error" id="loginError" role="alert"></p>
+      </form>
+    </section>
+
+    <!-- Dashboard -->
+    <div id="dash" hidden>
+      <div class="stats">
+        <div class="stat"><b id="statRides">0</b><span>Upcoming rides</span></div>
+        <div class="stat"><b id="statShuttles">0</b><span>Upcoming shuttles</span></div>
+        <div class="stat"><b id="statQuota">–</b><span>Emails left today</span></div>
+      </div>
+
+      <div class="admin-grid">
+        <div>
+          <section class="card">
+            <h2>Email notifications</h2>
+            <p class="sub">Riders with the same airport and direction within 30 minutes of each other get an email (once per match).</p>
+            <div class="toggle">
+              <div>
+                <strong>Automatic emails</strong>
+                <div class="count">Send match emails as soon as a ride or shuttle is posted.</div>
+              </div>
+              <label class="switch"><input type="checkbox" id="autoNotify" aria-label="Automatic emails"><span></span></label>
+            </div>
+            <div class="field" style="margin-top:14px">
+              <label for="siteUrl">Website link used in emails</label>
+              <div class="share-link">
+                <input type="url" id="siteUrl" placeholder="https://yourname.github.io/cardinal-carpool/">
+                <button class="btn btn-ghost" type="button" id="saveSiteUrl">Save</button>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-block" type="button" id="sendMatches">Send match emails now</button>
+            <p class="count" id="sendResult" style="margin:8px 0 0"></p>
+          </section>
+
+          <section class="card section-gap">
+            <h2>Add a $5 shuttle</h2>
+            <p class="sub">Shuttles appear on the ride list with a "Reserve a seat" button that opens your order form.</p>
+            <form id="shuttleForm" novalidate>
+              <div class="field">
+                <span class="label">Direction</span>
+                <div class="segmented">
+                  <label><input type="radio" name="direction" value="to" checked><span>To airport</span></label>
+                  <label><input type="radio" name="direction" value="from"><span>To Stanford</span></label>
+                </div>
+              </div>
+              <div class="field">
+                <span class="label">Airport</span>
+                <div class="segmented">
+                  <label><input type="radio" name="airport" value="SFO" checked><span>SFO</span></label>
+                  <label><input type="radio" name="airport" value="SJC"><span>SJC</span></label>
+                  <label><input type="radio" name="airport" value="OAK"><span>OAK</span></label>
+                </div>
+              </div>
+              <div class="row-2">
+                <div class="field">
+                  <label for="sDate">Date</label>
+                  <div class="date-wrap" data-date-field>
+                    <input type="text" id="sDate" name="date" placeholder="MM/DD/YYYY" inputmode="numeric" autocomplete="off" maxlength="10">
+                    <button type="button" class="cal-btn" aria-label="Open calendar">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                    </button>
+                    <input type="date" tabindex="-1" aria-hidden="true">
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="sTime">Departure time</label>
+                  <input type="time" id="sTime" name="time">
+                </div>
+              </div>
+              <div class="field">
+                <label for="sLocation">Pickup / drop-off location</label>
+                <select id="sLocation" name="location"></select>
+              </div>
+              <div class="field" id="sOtherField" hidden>
+                <label for="sLocationOther">Where exactly?</label>
+                <input type="text" id="sLocationOther" name="locationOther" maxlength="80">
+              </div>
+              <div class="field">
+                <label for="sOrderUrl">Order form link</label>
+                <input type="url" id="sOrderUrl" name="orderUrl" placeholder="https://forms.gle/…">
+                <div class="hint">Riders reserve and pay through this form.</div>
+              </div>
+              <div class="field">
+                <label for="sNotes">Notes (optional)</label>
+                <textarea id="sNotes" name="notes" maxlength="300" placeholder="e.g. 12 seats · meet at the Tresidder bus stop"></textarea>
+              </div>
+              <button class="btn btn-primary btn-block" type="submit" id="shuttleBtn">Add shuttle</button>
+              <p class="form-error" id="shuttleError" role="alert"></p>
+            </form>
+          </section>
+        </div>
+
+        <section class="card">
+          <div class="filter-bar" style="margin:0 0 8px">
+            <h2 style="margin:0">All rides</h2>
+            <label class="count" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="showPast"> Show past rides</label>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>When</th><th>Trip</th><th>Who</th><th>Location</th><th>Contact</th><th title="Matches emailed">✉️</th><th></th></tr>
+              </thead>
+              <tbody id="rideRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    Made by Samuel for SSS
+    <span class="dot">·</span>
+    <a href="mailto:sdesai05@stanford.edu?subject=Cardinal%20Carpool">Contact: sdesai05@stanford.edu</a>
+  </footer>
+
+  <dialog id="shareDialog"></dialog>
+  <div class="toast-wrap" id="toasts" aria-live="polite"></div>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>
