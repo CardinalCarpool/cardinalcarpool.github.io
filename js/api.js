@@ -150,7 +150,9 @@
   async function demo(payload) {
     await new Promise((r) => setTimeout(r, 250));
     const rides = demoRead();
-    const strip = ({ editKey, notified, notifySince, ...pub }) => pub;
+    // Public list omits alert settings; the poster's own add/update responses include them.
+    const own = ({ editKey, notified, notifySince, ...rest }) => rest;
+    const strip = (r) => { const { notify, notifyBefore, notifyAfter, ...pub } = own(r); return pub; };
     const admin = async () => {
       if ((await sha256(payload.password || '')) !== DEMO_PW_SHA256) throw new Error('Incorrect password.');
     };
@@ -164,7 +166,7 @@
         });
         rides.push(ride);
         demoWrite(rides);
-        return { ride: strip(ride), editKey: ride.editKey };
+        return { ride: own(ride), editKey: ride.editKey };
       }
       case 'update': {
         const r = rides.find((x) => x.id === payload.id);
@@ -176,7 +178,7 @@
         Object.assign(r, next, { updatedAt: now });
         if (reset) Object.assign(r, { notified: [], notifySince: now });
         demoWrite(rides);
-        return { ride: strip(r) };
+        return { ride: own(r) };
       }
       case 'remove': {
         const r = rides.find((x) => x.id === payload.id);
@@ -190,7 +192,7 @@
       case 'adminList':
         await admin();
         return {
-          rides: rides.map((r) => ({ ...strip(r), notifiedCount: (r.notified || []).length })),
+          rides: rides.map((r) => ({ ...own(r), notifiedCount: (r.notified || []).length })),
           settings: demoSettings(), quota: 100,
         };
       case 'adminAddShuttle': {

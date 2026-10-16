@@ -124,7 +124,11 @@
   function startEdit(id) {
     const mine = myRides.get(id);
     if (!mine) return;
-    const latest = rides.find((r) => r.id === id) || mine.ride;
+    const pub = rides.find((r) => r.id === id);
+    // Alert settings aren't in the public list, so they come from this browser's saved copy.
+    const latest = pub ? Object.assign({}, pub, {
+      notify: mine.ride.notify, notifyBefore: mine.ride.notifyBefore, notifyAfter: mine.ride.notifyAfter,
+    }) : mine.ride;
     editingId = id;
     fillForm(latest);
     // A ride has one direction; to add the other trip, post it separately.
@@ -308,8 +312,6 @@
     text: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
   };
 
-  const dur = (m) => (m >= 60 ? `${m / 60} hr` : `${m} min`);
-
   function rideCard(r, mineList) {
     const mine = !!myRides.get(r.id);
     const matchesMine = !mine && mineList.some((m) => isMatch(m, r));
@@ -319,7 +321,6 @@
       r.type === 'shuttle' ? '<span class="badge badge-shuttle">SSS</span>' : '',
       mine ? '<span class="badge badge-mine">Your ride</span>' : '',
       matchesMine ? '<span class="badge badge-match">Within 1 hr of your trip</span>' : '',
-      mine && r.notify ? `<span class="badge badge-notify" title="Alerts for rides from ${dur(r.notifyBefore)} before to ${dur(r.notifyAfter)} after">🔔 −${dur(r.notifyBefore)} / +${dur(r.notifyAfter)}</span>` : '',
     ].join('');
 
     let actions = '';

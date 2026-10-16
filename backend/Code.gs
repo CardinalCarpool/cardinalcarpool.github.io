@@ -195,7 +195,7 @@ function addRide_(input) {
   ride.notified = '';
   ride.notifySince = ride.createdAt;
   appendRide_(ride);
-  return { ride: publicRide_(ride), editKey: ride.editKey };
+  return { ride: ownRide_(ride), editKey: ride.editKey };
 }
 
 function updateRide_(id, editKey, input) {
@@ -211,7 +211,7 @@ function updateRide_(id, editKey, input) {
   Object.assign(existing, ride, { updatedAt: now });
   if (resetAlerts) Object.assign(existing, { notified: '', notifySince: now });
   writeRow_(existing._row, existing);
-  return { ride: publicRide_(existing) };
+  return { ride: ownRide_(existing) };
 }
 
 function removeOwnRide_(id, editKey) {
@@ -313,12 +313,18 @@ function publicRide_(r) {
     id: r.id, type: r.type, direction: r.direction, date: r.date, time: r.time, airport: r.airport,
     airline: r.airline, location: r.location, locationOther: r.locationOther, firstName: r.firstName,
     email: r.email, phone: r.phone, notes: r.notes, orderUrl: r.orderUrl, createdAt: r.createdAt,
-    notify: r.notify === 'yes', notifyBefore: Number(offset_(r.notifyBefore)), notifyAfter: Number(offset_(r.notifyAfter)),
   };
 }
 
+/** What the poster gets back about their own ride: public fields plus their private alert settings. */
+function ownRide_(r) {
+  return Object.assign(publicRide_(r), {
+    notify: r.notify === 'yes', notifyBefore: Number(offset_(r.notifyBefore)), notifyAfter: Number(offset_(r.notifyAfter)),
+  });
+}
+
 function adminRide_(r) {
-  const out = publicRide_(r);
+  const out = ownRide_(r);
   out.notifiedCount = r.notified ? r.notified.split(',').filter(Boolean).length : 0;
   return out;
 }
