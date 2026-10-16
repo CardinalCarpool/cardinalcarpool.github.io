@@ -2,14 +2,10 @@
  * Cardinal Carpool — Google Apps Script backend.
  *
  * Storage: the "Rides" tab of the Google Sheet this script is bound to.
- * Email:   MailApp, sent from the Google account that deploys the web app.
- *
- * Notifications are opt-in ("Notify me"). Once an hour, on the hour, one email is
- * BCC'd to every opted-in rider who has a new ride posted within their time window.
  *
  * Setup (see README.md):
- *   1. Project Settings → Script properties → add ADMIN_PASSWORD (and optionally SITE_URL).
- *   2. Run setup() once from the editor (creates the sheet and the hourly schedule).
+ *   1. Project Settings → Script properties → add ADMIN_PASSWORD.
+ *   2. Run setup() once from the editor (creates the sheet tab).
  *   3. Deploy → New deployment → Web app → Execute as: Me, Who has access: Anyone.
  *   4. Paste the /exec URL into js/config.js.
  */
@@ -17,21 +13,14 @@
 const SHEET_NAME = 'Rides';
 const HEADERS = [
   'id', 'createdAt', 'updatedAt', 'type', 'direction', 'date', 'time', 'airport', 'airline',
-  'location', 'locationOther', 'firstName', 'email', 'phone', 'notes', 'orderUrl', 'editKey', 'notified',
-  'notify', 'notifyBefore', 'notifyAfter', 'notifySince',
+  'location', 'locationOther', 'firstName', 'email', 'phone', 'notes', 'orderUrl', 'editKey',
 ];
 const AIRPORTS = ['SFO', 'SJC', 'OAK'];
 const DIRECTIONS = ['to', 'from']; // to = leaving Stanford for the airport, from = returning to Stanford
 const LOCATIONS = [
   'Branner', 'EV', 'FloMo', 'GovCo', 'Lagunita', 'Lower Row', 'Stern', 'Toyon', 'Upper Row', 'Wilbur', 'Other',
 ];
-const NOTIFY_OFFSETS = [0, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270]; // minutes before / after the rider's time
-const DEFAULT_NOTIFY_BEFORE = 60;
-const DEFAULT_NOTIFY_AFTER = 15;
-const BCC_BATCH = 50; // recipients per email
-const HOURLY_HANDLER = 'hourlyNotify';
 const TZ = 'America/Los_Angeles';
-const CONTACT_EMAIL = 'sdesai05@stanford.edu';
 
 // ---------- HTTP entry points ----------
 
@@ -74,29 +63,16 @@ function route_(req) {
 
     case 'adminLogin':
       requireAdmin_(req.password);
-      return { settings: getSettings_(), quota: MailApp.getRemainingDailyQuota(), nextRun: nextRunLabel_() };
+      return {};
     case 'adminList':
       requireAdmin_(req.password);
-      return {
-        rides: readRides_().map(adminRide_),
-        settings: getSettings_(),
-        quota: MailApp.getRemainingDailyQuota(),
-        nextRun: nextRunLabel_(),
-      };
+      return { rides: readRides_().map(publicRide_) };
     case 'adminAddShuttle':
       requireAdmin_(req.password);
       return withLock_(() => addShuttle_(req.shuttle));
     case 'adminDelete':
       requireAdmin_(req.password);
       return withLock_(() => ({ removed: deleteById_(req.id) }));
-    case 'adminSendMatches':
-      requireAdmin_(req.password);
-      return withLock_(() => sendMatchEmails_());
-    case 'adminSettings':
-      requireAdmin_(req.password);
-      const settings = saveSettings_(req.settings || {});
-      if (settings.autoNotify) scheduleNextRun_();
-      return { settings, nextRun: nextRunLabel_() };
     default:
       throw new Error('Unknown action.');
   }
@@ -112,7 +88,7 @@ function withLock_(fn) {
   }
 }
 
-// ---------- Auth & settings ----------
+// ---------- Auth ----------
 
 function requireAdmin_(password) {
   const expected = PropertiesService.getScriptProperties().getProperty('ADMIN_PASSWORD');
@@ -121,21 +97,6 @@ function requireAdmin_(password) {
     Utilities.sleep(800); // slow down guessing
     throw new Error('Incorrect password.');
   }
-}
-
-function getSettings_() {
-  const props = PropertiesService.getScriptProperties();
-  return {
-    autoNotify: props.getProperty('AUTO_NOTIFY') !== 'false',
-    siteUrl: props.getProperty('SITE_URL') || '',
-  };
-}
-
-function saveSettings_(s) {
-  const props = PropertiesService.getScriptProperties();
-  if (typeof s.autoNotify === 'boolean') props.setProperty('AUTO_NOTIFY', String(s.autoNotify));
-  if (typeof s.siteUrl === 'string') props.setProperty('SITE_URL', s.siteUrl.trim().slice(0, 300));
-  return getSettings_();
 }
 
 // ---------- Sheet access ----------
@@ -147,8 +108,6 @@ function sheet_() {
     sh = ss.insertSheet(SHEET_NAME);
     sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold');
     sh.setFrozenRows(1);
-  } else if (sh.getRange(1, 1, 1, HEADERS.length).getDisplayValues()[0].join() !== HEADERS.join()) {
-    sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold'); // new columns
   }
   return sh;
 }
@@ -193,10 +152,8 @@ function addRide_(input) {
   ride.updatedAt = ride.createdAt;
   ride.type = 'rider';
   ride.editKey = Utilities.getUuid();
-  ride.notified = '';
-  ride.notifySince = ride.createdAt;
   appendRide_(ride);
-  return { ride: ownRide_(ride), editKey: ride.editKey };
+  return { ride: publicRide_(ride), editKey: ride.editKey };
 }
 
 function updateRide_(id, editKey, input) {
@@ -204,15 +161,9 @@ function updateRide_(id, editKey, input) {
   if (!existing || existing.type !== 'rider' || !editKey || existing.editKey !== editKey) {
     throw new Error('Ride not found or you do not have permission to edit it.');
   }
-  const ride = validateRide_(input);
-  const now = new Date().toISOString();
-  // A new trip time or window (or turning alerts on) only alerts about rides posted from now on.
-  const resetAlerts = ['direction', 'date', 'time', 'airport', 'notifyBefore', 'notifyAfter'].some((k) => ride[k] !== existing[k]) ||
-    (ride.notify === 'yes' && existing.notify !== 'yes');
-  Object.assign(existing, ride, { updatedAt: now });
-  if (resetAlerts) Object.assign(existing, { notified: '', notifySince: now });
+  Object.assign(existing, validateRide_(input), { updatedAt: new Date().toISOString() });
   writeRow_(existing._row, existing);
-  return { ride: ownRide_(existing) };
+  return { ride: publicRide_(existing) };
 }
 
 function removeOwnRide_(id, editKey) {
@@ -243,7 +194,6 @@ function addShuttle_(input) {
   shuttle.updatedAt = shuttle.createdAt;
   shuttle.type = 'shuttle';
   shuttle.editKey = '';
-  shuttle.notified = '';
   appendRide_(shuttle);
   return { ride: publicRide_(shuttle) };
 }
@@ -269,14 +219,7 @@ function validateRide_(input) {
     phone,
     notes: '',
     orderUrl: '',
-    notify: email && (r.notify === true || r.notify === 'yes') ? 'yes' : '',
-    notifyBefore: offset_(r.notifyBefore, DEFAULT_NOTIFY_BEFORE),
-    notifyAfter: offset_(r.notifyAfter, DEFAULT_NOTIFY_AFTER),
   };
-}
-
-function offset_(v, fallback) {
-  return String(NOTIFY_OFFSETS.indexOf(Number(v)) === -1 ? fallback : Number(v));
 }
 
 function oneOf_(v, list, label) {
@@ -317,20 +260,6 @@ function publicRide_(r) {
   };
 }
 
-/** What the poster gets back about their own ride: public fields plus their private alert settings. */
-function ownRide_(r) {
-  return Object.assign(publicRide_(r), {
-    notify: r.notify === 'yes', notifyBefore: Number(offset_(r.notifyBefore, DEFAULT_NOTIFY_BEFORE)),
-    notifyAfter: Number(offset_(r.notifyAfter, DEFAULT_NOTIFY_AFTER)),
-  });
-}
-
-function adminRide_(r) {
-  const out = ownRide_(r);
-  out.notifiedCount = r.notified ? r.notified.split(',').filter(Boolean).length : 0;
-  return out;
-}
-
 // ---------- Time helpers (all times are Pacific wall-clock) ----------
 
 function minutes_(r) {
@@ -348,126 +277,8 @@ function isUpcoming_(r) {
   return minutes_(r) >= nowMinutes_() - 60; // keep rides visible until an hour after their time
 }
 
-// ---------- Matching & email ----------
-
-/** Is `other` a new ride inside `rider`'s alert window that they haven't been told about? */
-function isNewMatchFor_(rider, other) {
-  if (other.id === rider.id || other.direction !== rider.direction || other.airport !== rider.airport) return false;
-  const diff = minutes_(other) - minutes_(rider); // negative = earlier than the rider
-  if (diff < -Number(offset_(rider.notifyBefore, DEFAULT_NOTIFY_BEFORE)) ||
-    diff > Number(offset_(rider.notifyAfter, DEFAULT_NOTIFY_AFTER))) return false;
-  if ((other.updatedAt || other.createdAt) <= (rider.notifySince || rider.createdAt)) return false;
-  return (rider.notified ? rider.notified.split(',') : []).indexOf(other.id) === -1;
-}
-
-/**
- * Finds every opted-in rider with at least one new match and sends one generic
- * "check it out" email BCC'd to all of them (in batches of BCC_BATCH).
- */
-function sendMatchEmails_() {
-  const rides = readRides_().filter(isUpcoming_);
-  const subscribers = rides.filter((r) => r.type === 'rider' && r.notify === 'yes' && r.email);
-  const toNotify = [];
-  subscribers.forEach((rider) => {
-    const fresh = rides.filter((o) => isNewMatchFor_(rider, o));
-    if (fresh.length) toNotify.push({ rider, fresh });
-  });
-
-  // Each BCC recipient counts against the daily quota, so only send what fits.
-  let quota = MailApp.getRemainingDailyQuota();
-  const sending = toNotify.slice(0, Math.max(0, quota - 1)); // -1 for the visible "to" copy
-  const emails = Array.from(new Set(sending.map((x) => x.rider.email)));
-  const self = Session.getEffectiveUser().getEmail() || CONTACT_EMAIL;
-
-  for (let i = 0; i < emails.length; i += BCC_BATCH) {
-    MailApp.sendEmail({
-      to: self,
-      bcc: emails.slice(i, i + BCC_BATCH).join(','),
-      subject: 'You have a new ride match on Cardinal Carpool 🚗',
-      htmlBody: matchEmailHtml_(),
-      name: 'Cardinal Carpool',
-      replyTo: CONTACT_EMAIL,
-    });
-  }
-
-  sending.forEach(({ rider, fresh }) => {
-    const already = rider.notified ? rider.notified.split(',') : [];
-    rider.notified = already.concat(fresh.map((o) => o.id)).filter(Boolean).join(',');
-    writeRow_(rider._row, rider);
-  });
-
-  return {
-    emailsSent: Math.ceil(emails.length / BCC_BATCH),
-    recipients: emails.length,
-    ridersWithMatches: toNotify.length,
-    subscribers: subscribers.length,
-    quotaLeft: MailApp.getRemainingDailyQuota(),
-  };
-}
-
-function matchEmailHtml_() {
-  const site = getSettings_().siteUrl;
-  return '<div style="font-family:Helvetica,Arial,sans-serif;max-width:560px;margin:auto;color:#2e2d29">' +
-    '<h2 style="color:#8C1515;margin-bottom:4px">Cardinal Carpool</h2>' +
-    '<p>Good news! Someone new posted a ride within the time window you picked for your airport trip.</p>' +
-    '<p>Check it out and reach out to coordinate. Splitting an Uber or Lyft saves everyone money.</p>' +
-    (site ? '<p><a href="' + esc_(site) + '" style="display:inline-block;background:#8C1515;color:#fff;' +
-      'padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold">See your matches →</a></p>' : '') +
-    '<p style="color:#53565a;font-size:13px">You\'re getting this because you turned on "Notify me" for a ride. ' +
-    'To stop, edit your ride on Cardinal Carpool and turn it off.</p>' +
-    '<p style="color:#888;font-size:12px">Made by Samuel for SSS · Questions? ' +
-    '<a href="mailto:' + CONTACT_EMAIL + '">' + CONTACT_EMAIL + '</a></p></div>';
-}
-
-// ---------- Hourly schedule ----------
-
-/** Runs at the top of every hour; always books the next run, even if sending fails. */
-function hourlyNotify() {
-  try {
-    if (getSettings_().autoNotify) withLock_(() => sendMatchEmails_());
-  } finally {
-    scheduleNextRun_();
-  }
-}
-
-/** One-off trigger at the next :00. (Apps Script's "every hour" triggers don't fire on the hour.) */
-function scheduleNextRun_() {
-  ScriptApp.getProjectTriggers()
-    .filter((t) => t.getHandlerFunction() === HOURLY_HANDLER)
-    .forEach((t) => ScriptApp.deleteTrigger(t));
-  const next = new Date();
-  next.setMinutes(0, 0, 0);
-  next.setHours(next.getHours() + 1);
-  ScriptApp.newTrigger(HOURLY_HANDLER).timeBased().at(next).create();
-  PropertiesService.getScriptProperties().setProperty('NEXT_RUN', next.toISOString());
-}
-
-/** Safety net (every 6 hours): restarts the hourly chain if it ever broke. */
-function ensureSchedule() {
-  const hasNext = ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === HOURLY_HANDLER);
-  const next = PropertiesService.getScriptProperties().getProperty('NEXT_RUN');
-  if (!hasNext || !next || new Date(next) < new Date(Date.now() - 10 * 60000)) scheduleNextRun_();
-}
-
-function nextRunLabel_() {
-  const next = PropertiesService.getScriptProperties().getProperty('NEXT_RUN');
-  return next && new Date(next) > new Date() ? Utilities.formatDate(new Date(next), TZ, 'h:mm a') : '';
-}
-
-function esc_(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-  ));
-}
-
-/** Run once from the editor: creates the sheet tab, authorizes email, and starts the hourly schedule. */
+/** Run once from the editor: creates the sheet tab and authorizes the script. */
 function setup() {
   sheet_();
-  ScriptApp.getProjectTriggers()
-    .filter((t) => t.getHandlerFunction() === 'ensureSchedule')
-    .forEach((t) => ScriptApp.deleteTrigger(t));
-  ScriptApp.newTrigger('ensureSchedule').timeBased().everyHours(6).create();
-  scheduleNextRun_();
-  Logger.log('Ready. Next email run: ' + nextRunLabel_() + '. Email quota left today: ' +
-    MailApp.getRemainingDailyQuota());
+  Logger.log('Ready.');
 }

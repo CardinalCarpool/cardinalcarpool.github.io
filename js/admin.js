@@ -18,12 +18,11 @@
   // ---------- login ----------
   async function login(pw) {
     password = pw;
-    const res = await admin('adminLogin');
+    await admin('adminLogin');
     try { sessionStorage.setItem(PW_KEY, pw); } catch (e) { /* storage unavailable */ }
     $('#loginCard').hidden = true;
     $('#dash').hidden = false;
     $('#logout').hidden = false;
-    applySettings(res.settings, res.quota, res.nextRun);
     await refresh();
   }
 
@@ -44,62 +43,6 @@
   $('#logout').addEventListener('click', () => {
     try { sessionStorage.removeItem(PW_KEY); } catch (e) { /* storage unavailable */ }
     location.reload();
-  });
-
-  // ---------- settings ----------
-  function applySettings(settings, quota, nextRun) {
-    if (settings && nextRun !== undefined) {
-      $('#nextRun').textContent = !settings.autoNotify ? 'Paused: no emails will be sent.'
-        : nextRun ? `On. Next send: ${nextRun}.` : 'On. Sent on the hour, every hour.';
-    }
-    if (settings) {
-      $('#autoNotify').checked = !!settings.autoNotify;
-      $('#siteUrl').value = settings.siteUrl || '';
-    }
-    if (quota != null) $('#statQuota').textContent = quota;
-  }
-
-  $('#autoNotify').addEventListener('change', async (e) => {
-    try {
-      const res = await admin('adminSettings', { settings: { autoNotify: e.target.checked } });
-      applySettings(res.settings, null, res.nextRun || '');
-      toast(`Hourly emails ${res.settings.autoNotify ? 'on' : 'paused'}.`);
-    } catch (ex) {
-      e.target.checked = !e.target.checked;
-      toast(ex.message, true);
-    }
-  });
-
-  $('#saveSiteUrl').addEventListener('click', async () => {
-    try {
-      const res = await admin('adminSettings', { settings: { siteUrl: $('#siteUrl').value } });
-      applySettings(res.settings);
-      toast('Website link saved.');
-    } catch (ex) {
-      toast(ex.message, true);
-    }
-  });
-
-  $('#sendMatches').addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    btn.textContent = 'Sending…';
-    try {
-      const res = await admin('adminSendMatches');
-      $('#sendResult').textContent = res.recipients
-        ? `Emailed ${res.recipients} rider${res.recipients === 1 ? '' : 's'} (BCC).`
-        : `No new matches to email. ${res.subscribers} rider${res.subscribers === 1 ? ' has' : 's have'} Notify me on.`;
-      if (res.ridersWithMatches > res.recipients) {
-        $('#sendResult').textContent += ` ${res.ridersWithMatches - res.recipients} waiting: daily email limit reached.`;
-      }
-      if (res.quotaLeft != null) $('#statQuota').textContent = res.quotaLeft;
-      await refresh();
-    } catch (ex) {
-      toast(ex.message, true);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Send match emails now';
-    }
   });
 
   // ---------- shuttle ----------
@@ -133,7 +76,7 @@
     btn.disabled = true;
     try {
       const res = await admin('adminAddShuttle', { shuttle });
-      toast('Shuttle added. Riders nearby with Notify me on will hear about it at the top of the hour.');
+      toast('Shuttle added.');
       sForm.reset();
       $('#sOtherField').hidden = true;
       await refresh();
@@ -148,7 +91,6 @@
   async function refresh() {
     const res = await admin('adminList');
     rides = res.rides || [];
-    applySettings(res.settings, res.quota, res.nextRun);
     render();
   }
 
@@ -160,7 +102,7 @@
 
     const list = ($('#showPast').checked ? rides : upcoming).slice().sort((a, b) => minutesOf(a) - minutesOf(b));
     if (!list.length) {
-      $('#rideRows').innerHTML = '<tr><td colspan="7" class="empty">No rides yet.</td></tr>';
+      $('#rideRows').innerHTML = '<tr><td colspan="6" class="empty">No rides yet.</td></tr>';
       return;
     }
     $('#rideRows').innerHTML = list.map((r) => {
@@ -168,7 +110,7 @@
       const trip = r.direction === 'to' ? `Stanford → ${r.airport}` : `${r.airport} → Stanford`;
       const who = r.type === 'shuttle'
         ? '<span class="badge badge-shuttle">$5 Shuttle</span>'
-        : `${esc(r.firstName)}${r.notify ? ` <span title="Notify me: ${r.notifyBefore} min before to ${r.notifyAfter} min after">🔔</span>` : ''}<div class="count">${esc(r.airline)}</div>`;
+        : `${esc(r.firstName)}<div class="count">${esc(r.airline)}</div>`;
       const contact = r.type === 'shuttle'
         ? (r.orderUrl ? `<a href="${esc(r.orderUrl)}" target="_blank" rel="noopener">Order form</a>` : '') +
           (r.notes ? `<div class="count">${esc(r.notes)}</div>` : '')
@@ -179,7 +121,6 @@
         <td>${who}</td>
         <td>${esc(placeOf(r))}</td>
         <td style="overflow-wrap:anywhere">${contact}</td>
-        <td>${r.type === 'rider' ? r.notifiedCount || 0 : ''}</td>
         <td><button class="btn btn-danger btn-sm" data-del="${esc(r.id)}">Delete</button></td>
       </tr>`;
     }).join('');

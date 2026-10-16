@@ -1,7 +1,7 @@
 // Main page: post / edit a ride, filter and browse rides.
 (function () {
   const {
-    AIRLINES, MATCH_WINDOW_MIN, DEMO, esc, minutesOf, fmtTime, fmtMinutes, isoToMDY, mdyToIso,
+    AIRLINES, DEMO, esc, minutesOf, fmtTime, fmtMinutes, isoToMDY, mdyToIso,
     fmtDateLong, nowMinutes, todayIso, isMatch, placeOf, myRides, call,
   } = window.CC;
   const { toast, initDateField, fillLocations } = window.UI;
@@ -34,22 +34,7 @@
       : dirs[0] === 'from' ? 'Drop-off location' : 'Pickup location';
     if (!editingId) $('#submitBtn').textContent = dirs.length === 2 ? 'Add my 2 rides' : 'Add my ride';
   }
-  // On by default; remembers the rider's choice while the box is disabled for lack of an email.
-  let notifyWanted = true;
-  function syncNotify() {
-    const hasEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.value.trim());
-    form.notify.disabled = !hasEmail;
-    form.notify.checked = hasEmail && notifyWanted;
-    $('#notifyWindowRow').hidden = !form.notify.checked;
-    $('#notifyHint').textContent = !hasEmail
-      ? 'Add an email above to turn this on. Alerts go out at the top of each hour.'
-      : form.notify.checked
-        ? "We'll email you at the top of the hour if someone new posts within this window. Turn it off any time by editing your ride."
-        : "Off: you won't get any emails.";
-  }
-  form.email.addEventListener('input', syncNotify);
   form.addEventListener('change', (e) => {
-    if (e.target.name === 'notify') { notifyWanted = form.notify.checked; syncNotify(); }
     if (e.target.name === 'dir') {
       if (!checkedDirs().length) e.target.checked = true; // keep at least one
       syncDirections();
@@ -90,9 +75,6 @@
       firstName: form.firstName.value.trim(),
       email: form.email.value.trim(),
       phone: form.phone.value.trim(),
-      notify: form.notify.checked,
-      notifyBefore: Number(form.notifyBefore.value),
-      notifyAfter: Number(form.notifyAfter.value),
     };
     if (!shared.location) return [null, 'Please choose a location.', form.location];
     if (shared.location === 'Other' && !shared.locationOther) return [null, 'Please say where for "Other".', form.locationOther];
@@ -116,23 +98,20 @@
     form.firstName.value = r.firstName;
     form.email.value = r.email || '';
     form.phone.value = r.phone || '';
-    notifyWanted = !!r.notify;
-    form.notifyBefore.value = String(r.notifyBefore != null ? r.notifyBefore : 60);
-    form.notifyAfter.value = String(r.notifyAfter != null ? r.notifyAfter : 15);
     syncDirections();
-    syncNotify();
   }
+
+  const readWindow = () => ({ before: Number(form.matchBefore.value), after: Number(form.matchAfter.value) });
 
   function startEdit(id) {
     const mine = myRides.get(id);
     if (!mine) return;
-    const pub = rides.find((r) => r.id === id);
-    // Alert settings aren't in the public list, so they come from this browser's saved copy.
-    const latest = pub ? Object.assign({}, pub, {
-      notify: mine.ride.notify, notifyBefore: mine.ride.notifyBefore, notifyAfter: mine.ride.notifyAfter,
-    }) : mine.ride;
+    const latest = rides.find((r) => r.id === id) || mine.ride;
     editingId = id;
     fillForm(latest);
+    const win = myRides.window(id);
+    form.matchBefore.value = String(win.before);
+    form.matchAfter.value = String(win.after);
     // A ride has one direction; to add the other trip, post it separately.
     DIRS.forEach((d) => { dirBox(d).disabled = d !== latest.direction; });
     $('#postCard').classList.add('editing');
@@ -147,7 +126,6 @@
     editingId = null;
     const keep = { firstName: form.firstName.value, email: form.email.value, phone: form.phone.value };
     form.reset();
-    notifyWanted = true;
     DIRS.forEach((d) => { dirBox(d).disabled = false; });
     form.firstName.value = keep.firstName;
     form.email.value = keep.email;
@@ -156,7 +134,6 @@
     $('#postCard').classList.remove('editing');
     $('#postTitle').textContent = 'Post your ride';
     syncDirections();
-    syncNotify();
   }
   $('#cancelEdit').addEventListener('click', stopEdit);
 
@@ -178,28 +155,25 @@
       if (editingId) {
         const mine = myRides.get(editingId);
         const res = await call({ action: 'update', id: editingId, editKey: mine.editKey, ride: trips[0] });
-        myRides.save(editingId, mine.editKey, res.ride);
+        myRides.save(editingId, mine.editKey, res.ride, readWindow());
         saved.push(res.ride);
         toast('Ride updated!');
       } else {
         for (const trip of trips) {
           const res = await call({ action: 'add', ride: trip });
-          myRides.save(res.ride.id, res.editKey, res.ride);
+          myRides.save(res.ride.id, res.editKey, res.ride, readWindow());
           saved.push(res.ride);
         }
         const what = saved.length === 2 ? 'Both rides added!' : 'Ride added!';
-        toast(trips[0].notify
-          ? `${what} We'll email you at the top of the hour if someone new matches.`
-          : `${what} You can edit ${saved.length === 2 ? 'them' : 'it'} any time from this browser.`);
+        toast(`${what} Check Your matches at the top. You can edit ${saved.length === 2 ? 'them' : 'it'} any time from this browser.`);
       }
       stopEdit();
       if (window.Eggs) window.Eggs.onRidePosted(saved[0]);
       await load();
-      showMatchesFor(saved[0].id);
-      const card = listEl.querySelector(`[data-id="${CSS.escape(saved[0].id)}"]`);
-      if (card) {
-        card.classList.add('highlight');
-        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const group = $('#matchesList').querySelector(`[data-trip="${CSS.escape(saved[0].id)}"]`);
+      if (group) {
+        $('#matchesCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        group.querySelector('.match-trip-head').classList.add('highlight');
       }
     } catch (ex) {
       // If the first of two rides saved but the second failed, say so and keep the form filled.
@@ -257,30 +231,6 @@
   }
   $('#resetFilters').addEventListener('click', resetFilters);
 
-  function showMatchesFor(id) {
-    const r = rides.find((x) => x.id === id);
-    if (!r) return;
-    setRadio('fDirection', r.direction);
-    setRadio('fAirport', r.airport);
-    $('#fDate').value = isoToMDY(r.date);
-    $('#fLocation').value = '';
-    const [h, m] = r.time.split(':').map(Number);
-    const mins = h * 60 + m;
-    tMin.value = Math.max(0, Math.floor((mins - MATCH_WINDOW_MIN) / 15) * 15);
-    tMax.value = Math.min(1440, Math.ceil((mins + MATCH_WINDOW_MIN) / 15) * 15);
-    syncRange();
-    render();
-  }
-  // Cycles through your rides when you have more than one (e.g. departure and return).
-  let matchIdx = 0;
-  $('#matchMine').addEventListener('click', () => {
-    const mine = upcomingMine();
-    if (!mine.length) return;
-    const r = mine[matchIdx++ % mine.length];
-    showMatchesFor(r.id);
-    if (mine.length > 1) toast(`Showing matches for your ${r.direction === 'to' ? 'departure' : 'return'} (${isoToMDY(r.date)}). Click again for the other.`);
-  });
-
   function upcomingMine() {
     const ids = myRides.all();
     return rides.filter((r) => ids[r.id]).sort((a, b) => minutesOf(a) - minutesOf(b));
@@ -315,15 +265,15 @@
     text: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
   };
 
-  function rideCard(r, mineList) {
+  function rideCard(r, mineList, inMatches) {
     const mine = !!myRides.get(r.id);
-    const matchesMine = !mine && mineList.some((m) => isMatch(m, r));
+    const matchesMine = !mine && !inMatches && mineList.some((m) => isMatch(m, r, myRides.window(m.id)));
     const where = placeOf(r);
     const route = r.direction === 'to' ? `${esc(where)} → ${esc(r.airport)}` : `${esc(r.airport)} → ${esc(where)}`;
     const badges = [
       r.type === 'shuttle' ? '<span class="badge badge-shuttle">SSS</span>' : '',
       mine ? '<span class="badge badge-mine">Your ride</span>' : '',
-      matchesMine ? '<span class="badge badge-match">Within 1 hr of your trip</span>' : '',
+      matchesMine ? '<span class="badge badge-match">Matches your trip</span>' : '',
     ].join('');
 
     let actions = '';
@@ -363,13 +313,13 @@
   function render() {
     const list = filtered();
     const mineList = upcomingMine();
-    $('#matchMine').hidden = mineList.length === 0;
+    renderMatches(mineList);
     $('#count').textContent = `${list.length} ride${list.length === 1 ? '' : 's'} found`;
 
     if (!list.length) {
       listEl.innerHTML = `<div class="empty">
         <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 17h-2v-5l2-5h12l3 5h1v5h-2"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/><path d="M9.5 17h5"/></svg>
-        <p><strong>No rides match these filters yet.</strong><br>Post yours and turn on "Notify me" to hear when someone new posts near your time.</p>
+        <p><strong>No rides match these filters yet.</strong><br>Post yours and nearby rides will show up in Your matches.</p>
       </div>`;
       return;
     }
@@ -382,7 +332,41 @@
       </div>`).join('');
   }
 
-  listEl.addEventListener('click', async (e) => {
+  // ---------- your matches ----------
+  const dur = (m) => (m === 0 ? '0 min' : m >= 60 ? `${m / 60} hr` : `${m} min`);
+
+  function renderMatches(mineList) {
+    $('#matchesCard').hidden = mineList.length === 0;
+    if (!mineList.length) return;
+    const cutoff = nowMinutes() - 60;
+    let total = 0;
+    $('#matchesList').innerHTML = mineList.map((m) => {
+      const win = myRides.window(m.id);
+      const matches = rides
+        .filter((r) => minutesOf(r) >= cutoff && isMatch(m, r, win))
+        .sort((x, y) => minutesOf(x) - minutesOf(y));
+      total += matches.length;
+      const where = placeOf(m);
+      const route = m.direction === 'to' ? `${where} → ${m.airport}` : `${m.airport} → ${where}`;
+      return `<div class="match-trip" data-trip="${esc(m.id)}">
+        <div class="match-trip-head">
+          <div>
+            <strong>${m.direction === 'to' ? '✈️ Your departure' : '🌲 Your return'} · ${esc(fmtDateLong(m.date))} · ${esc(fmtTime(m.time))}</strong>
+            <div class="count">${esc(route)} · ${matches.length} match${matches.length === 1 ? '' : 'es'} from ${dur(win.before)} before to ${dur(win.after)} after</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" type="button" data-edit="${esc(m.id)}">Edit</button>
+        </div>
+        ${matches.length
+          ? `<div class="rides">${matches.map((r) => rideCard(r, mineList, true)).join('')}</div>`
+          : '<p class="match-none">No matches yet. Check back soon, or share the site so more people post.</p>'}
+      </div>`;
+    }).join('');
+    $('#matchesSub').textContent = total
+      ? `${total} ride${total === 1 ? '' : 's'} near the trips you posted. Reach out to split the cost!`
+      : 'Nobody near your trips yet. New rides show up here as people post.';
+  }
+
+  async function onListClick(e) {
     const edit = e.target.closest('[data-edit]');
     const remove = e.target.closest('[data-remove]');
     if (edit) startEdit(edit.dataset.edit);
@@ -401,7 +385,9 @@
         remove.disabled = false;
       }
     }
-  });
+  }
+  listEl.addEventListener('click', onListClick);
+  $('#matchesList').addEventListener('click', onListClick);
 
   // ---------- load ----------
   async function load() {
@@ -430,7 +416,6 @@
   }
 
   syncDirections();
-  syncNotify();
   syncRange();
   load();
   setInterval(() => { if (!document.hidden && !editingId) load(); }, 60000);

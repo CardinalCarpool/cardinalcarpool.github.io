@@ -35,7 +35,7 @@
 
   <main>
     <div id="demoNote" class="demo-note" hidden>
-      <strong>Demo mode:</strong> no backend is connected, so data lives in this browser and emails are only logged to the console.
+      <strong>Demo mode:</strong> no backend is connected, so data lives in this browser and nothing is shared with other people.
     </div>
 
     <!-- Login -->
@@ -57,33 +57,11 @@
       <div class="stats">
         <div class="stat"><b id="statRides">0</b><span>Upcoming rides</span></div>
         <div class="stat"><b id="statShuttles">0</b><span>Upcoming shuttles</span></div>
-        <div class="stat" title="Google lets an Apps Script send a limited number of emails per day (about 100 on a regular Gmail account, more on Google Workspace). This counts down as match emails go out and resets daily."><b id="statQuota">–</b><span>Emails left today (Google limit)</span></div>
       </div>
 
       <div class="admin-grid">
         <div>
           <section class="card">
-            <h2>Email notifications</h2>
-            <p class="sub">Only riders who turned on <strong>Notify me</strong> get emails. At the top of every hour, one email is BCC'd to everyone who has a new ride posted inside their chosen time window. It just tells them to come check the site.</p>
-            <div class="toggle">
-              <div>
-                <strong>Hourly match emails</strong>
-                <div class="count" id="nextRun">Sent on the hour, every hour.</div>
-              </div>
-              <label class="switch"><input type="checkbox" id="autoNotify" aria-label="Hourly match emails"><span></span></label>
-            </div>
-            <div class="field" style="margin-top:14px">
-              <label for="siteUrl">Website link used in emails</label>
-              <div class="share-link">
-                <input type="url" id="siteUrl" placeholder="https://samueldesai.github.io/cardinal-carpool/">
-                <button class="btn btn-ghost" type="button" id="saveSiteUrl">Save</button>
-              </div>
-            </div>
-            <button class="btn btn-primary btn-block" type="button" id="sendMatches">Send match emails now</button>
-            <p class="count" id="sendResult" style="margin:8px 0 0"></p>
-          </section>
-
-          <section class="card section-gap">
             <h2>Add a $5 shuttle</h2>
             <p class="sub">Shuttles appear on the ride list with a "Reserve a seat" button that opens your order form.</p>
             <form id="shuttleForm" novalidate>
@@ -149,7 +127,7 @@
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th>When</th><th>Trip</th><th>Who</th><th>Location</th><th>Contact</th><th title="Matches emailed">✉️</th><th></th></tr>
+                <tr><th>When</th><th>Trip</th><th>Who</th><th>Location</th><th>Contact</th><th></th></tr>
               </thead>
               <tbody id="rideRows"></tbody>
             </table>

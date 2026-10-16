@@ -40,8 +40,19 @@
 
   <main>
     <div id="demoNote" class="demo-note" hidden>
-      <strong>Demo mode:</strong> no backend is connected yet, so rides are saved only in this browser and no emails are sent.
+      <strong>Demo mode:</strong> no backend is connected yet, so rides are saved only in this browser.
     </div>
+
+    <section class="card matches-card" id="matchesCard" aria-labelledby="matchesTitle" hidden>
+      <div class="matches-head">
+        <div>
+          <h2 id="matchesTitle">Your matches</h2>
+          <p class="sub" id="matchesSub">Rides near the trips you posted from this browser.</p>
+        </div>
+        <button class="btn btn-ghost btn-sm" type="button" data-share>Invite friends</button>
+      </div>
+      <div id="matchesList"></div>
+    </section>
 
     <div class="layout">
       <!-- Post a ride -->
@@ -152,14 +163,10 @@
           </div>
           <p class="hint" style="margin:-4px 0 14px;font-size:.82rem;color:var(--muted)">Add an email and/or phone. Both are shown to students browsing rides.</p>
 
-          <div class="notify-box" id="notifyBox">
-            <label class="notify-toggle">
-              <input type="checkbox" id="notify" name="notify" checked>
-              <span><strong>🔔 Notify me</strong> when someone new posts a ride near my time</span>
-            </label>
-            <div class="notify-window" id="notifyWindowRow" hidden>
-              <span>Rides from</span>
-              <select id="notifyBefore" name="notifyBefore" aria-label="Before my time">
+          <div class="notify-box">
+            <span class="label" style="display:block;font-weight:600;font-size:.9rem">🤝 Match me with rides from</span>
+            <div class="notify-window">
+              <select id="matchBefore" name="matchBefore" aria-label="Minutes before my time">
                 <option value="0">0 min</option>
                 <option value="15">15 min</option>
                 <option value="30">30 min</option>
@@ -174,7 +181,7 @@
                 <option value="270">4.5 hours</option>
               </select>
               <span>before to</span>
-              <select id="notifyAfter" name="notifyAfter" aria-label="After my time">
+              <select id="matchAfter" name="matchAfter" aria-label="Minutes after my time">
                 <option value="0">0 min</option>
                 <option value="15" selected>15 min</option>
                 <option value="30">30 min</option>
@@ -190,7 +197,7 @@
               </select>
               <span>after my time</span>
             </div>
-            <p class="notify-hint" id="notifyHint">Add an email above to turn this on. Alerts go out at the top of each hour.</p>
+            <p class="notify-hint">These show up in <strong>Your matches</strong> at the top of the page.</p>
           </div>
 
           <button class="btn btn-primary btn-block" type="submit" id="submitBtn">Add my ride</button>
@@ -250,7 +257,6 @@
         <div class="filter-bar">
           <span class="count" id="count" aria-live="polite"></span>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-ghost btn-sm" type="button" id="matchMine" hidden>Show matches for my ride</button>
             <button class="btn btn-ghost btn-sm" type="button" id="resetFilters">Reset filters</button>
           </div>
         </div>

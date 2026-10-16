@@ -5,12 +5,14 @@
     'Branner', 'EV', 'FloMo', 'GovCo', 'Lagunita', 'Lower Row', 'Stern', 'Toyon', 'Upper Row', 'Wilbur',
   ]; // "Other" is appended in the UI
   const AIRLINES = [
-    'Alaska', 'American', 'Delta', 'Frontier', 'Hawaiian', 'JetBlue', 'Southwest', 'Spirit', 'United',
+    'Alaska', 'American', 'Delta', 'Frontier', 'Hawaiian', 'JetBlue', 'Southwest', 'United',
     'Air Canada', 'Air France', 'British Airways', 'Emirates', 'Japan Airlines', 'Lufthansa', 'Qantas',
+    'Other',
   ];
-  const MATCH_WINDOW_MIN = 60; // "Show matches" and the "near your trip" badge: ±1 hour
-  const NOTIFY_OFFSETS = [0, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270]; // minutes before / after
-  const DEFAULT_NOTIFY = { notifyBefore: 60, notifyAfter: 15 };
+  // "Your matches": rides from `before` minutes earlier to `after` minutes later than yours.
+  // Each poster can change this per ride; it's saved only in their browser.
+  const MATCH_OFFSETS = [0, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270];
+  const DEFAULT_MATCH_WINDOW = { before: 60, after: 15 };
   const CONTACT_EMAIL = 'sdesai05@stanford.edu';
 
   const API_URL = (window.CC_CONFIG && window.CC_CONFIG.API_URL || '').trim();
@@ -66,8 +68,13 @@
     const d = new Date(mins * 60000);
     return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
   };
-  const isMatch = (a, b) => a.id !== b.id && a.direction === b.direction && a.airport === b.airport &&
-    Math.abs(minutesOf(a) - minutesOf(b)) <= MATCH_WINDOW_MIN;
+  // Does `other` fall inside `mine`'s match window (same direction and airport)?
+  const isMatch = (mine, other, win) => {
+    if (other.id === mine.id || other.direction !== mine.direction || other.airport !== mine.airport) return false;
+    const w = win || DEFAULT_MATCH_WINDOW;
+    const diff = minutesOf(other) - minutesOf(mine);
+    return diff >= -w.before && diff <= w.after;
+  };
   const placeOf = (r) => (r.location === 'Other' ? (r.locationOther || 'Other') : r.location);
 
   // ---------- "my rides" (edit keys kept in this browser) ----------
@@ -76,9 +83,9 @@
     all() {
       try { return JSON.parse(localStorage.getItem(MINE_KEY) || '{}'); } catch (e) { return {}; }
     },
-    save(id, editKey, ride) {
+    save(id, editKey, ride, window) {
       const all = this.all();
-      all[id] = { editKey, ride };
+      all[id] = { editKey, ride, window: window || (all[id] && all[id].window) || DEFAULT_MATCH_WINDOW };
       try { localStorage.setItem(MINE_KEY, JSON.stringify(all)); } catch (e) { /* storage unavailable */ }
     },
     remove(id) {
@@ -87,6 +94,7 @@
       try { localStorage.setItem(MINE_KEY, JSON.stringify(all)); } catch (e) { /* storage unavailable */ }
     },
     get(id) { return this.all()[id] || null; },
+    window(id) { const m = this.get(id); return (m && m.window) || DEFAULT_MATCH_WINDOW; },
   };
 
   // ---------- remote backend ----------
@@ -105,14 +113,9 @@
 
   // ---------- demo backend (localStorage) ----------
   const DEMO_KEY = 'cc_demo_rides';
-  const DEMO_SETTINGS = 'cc_demo_settings';
   const DEMO_PW_SHA256 = '6904a419dd44d2a41326b38721bd1853494310db095f2196ea7b64692b356b9e';
   const demoRead = () => { try { return JSON.parse(localStorage.getItem(DEMO_KEY) || '[]'); } catch (e) { return []; } };
   const demoWrite = (rides) => localStorage.setItem(DEMO_KEY, JSON.stringify(rides));
-  const demoSettings = () => {
-    try { return Object.assign({ autoNotify: true, siteUrl: '' }, JSON.parse(localStorage.getItem(DEMO_SETTINGS) || '{}')); }
-    catch (e) { return { autoNotify: true, siteUrl: '' }; }
-  };
   const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now());
   async function sha256(text) {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -121,38 +124,12 @@
   function demoValidate(r) {
     if (!r.email && !r.phone) throw new Error('Please add an email or phone number.');
     if (!r.firstName) throw new Error('Please enter your first name.');
-    r.notify = !!(r.email && r.notify);
-    ['notifyBefore', 'notifyAfter'].forEach((k) => {
-      r[k] = NOTIFY_OFFSETS.includes(Number(r[k])) ? Number(r[k]) : DEFAULT_NOTIFY[k];
-    });
     return r;
-  }
-  // Mirrors sendMatchEmails_() in backend/Code.gs: one BCC email to everyone with a new match.
-  function demoSendMatches() {
-    const rides = demoRead();
-    const subscribers = rides.filter((r) => r.type === 'rider' && r.notify && r.email);
-    const toNotify = subscribers.filter((rider) => {
-      const fresh = rides.filter((o) => o.id !== rider.id && o.direction === rider.direction &&
-        o.airport === rider.airport && minutesOf(o) >= minutesOf(rider) - rider.notifyBefore &&
-        minutesOf(o) <= minutesOf(rider) + rider.notifyAfter &&
-        (o.updatedAt || o.createdAt) > (rider.notifySince || rider.createdAt) && !(rider.notified || []).includes(o.id));
-      rider.notified = (rider.notified || []).concat(fresh.map((o) => o.id));
-      return fresh.length > 0;
-    });
-    demoWrite(rides);
-    const emails = [...new Set(toNotify.map((r) => r.email))];
-    if (emails.length) console.info('[demo] Would send one email, BCC:', emails.join(', '));
-    return {
-      emailsSent: emails.length ? Math.ceil(emails.length / 50) : 0, recipients: emails.length,
-      ridersWithMatches: toNotify.length, subscribers: subscribers.length, quotaLeft: 100,
-    };
   }
   async function demo(payload) {
     await new Promise((r) => setTimeout(r, 250));
     const rides = demoRead();
-    // Public list omits alert settings; the poster's own add/update responses include them.
-    const own = ({ editKey, notified, notifySince, ...rest }) => rest;
-    const strip = (r) => { const { notify, notifyBefore, notifyAfter, ...pub } = own(r); return pub; };
+    const strip = ({ editKey, ...pub }) => pub;
     const admin = async () => {
       if ((await sha256(payload.password || '')) !== DEMO_PW_SHA256) throw new Error('Incorrect password.');
     };
@@ -162,23 +139,18 @@
       case 'add': {
         const now = new Date().toISOString();
         const ride = Object.assign(demoValidate({ ...payload.ride }), {
-          id: uuid(), type: 'rider', editKey: uuid(), notified: [], createdAt: now, updatedAt: now, notifySince: now,
+          id: uuid(), type: 'rider', editKey: uuid(), createdAt: now, updatedAt: now,
         });
         rides.push(ride);
         demoWrite(rides);
-        return { ride: own(ride), editKey: ride.editKey };
+        return { ride: strip(ride), editKey: ride.editKey };
       }
       case 'update': {
         const r = rides.find((x) => x.id === payload.id);
         if (!r || r.editKey !== payload.editKey) throw new Error('Ride not found or you do not have permission to edit it.');
-        const next = demoValidate({ ...payload.ride });
-        const now = new Date().toISOString();
-        const reset = ['direction', 'date', 'time', 'airport', 'notifyBefore', 'notifyAfter'].some((k) => next[k] !== r[k]) ||
-          (next.notify && !r.notify);
-        Object.assign(r, next, { updatedAt: now });
-        if (reset) Object.assign(r, { notified: [], notifySince: now });
+        Object.assign(r, demoValidate({ ...payload.ride }), { updatedAt: new Date().toISOString() });
         demoWrite(rides);
-        return { ride: own(r) };
+        return { ride: strip(r) };
       }
       case 'remove': {
         const r = rides.find((x) => x.id === payload.id);
@@ -188,20 +160,17 @@
       }
       case 'adminLogin':
         await admin();
-        return { settings: demoSettings(), quota: 100 };
+        return {};
       case 'adminList':
         await admin();
-        return {
-          rides: rides.map((r) => ({ ...own(r), notifiedCount: (r.notified || []).length })),
-          settings: demoSettings(), quota: 100,
-        };
+        return { rides: rides.map(strip) };
       case 'adminAddShuttle': {
         await admin();
         const s = payload.shuttle;
         if (!/^https:\/\/\S{3,}$/.test(s.orderUrl || '')) throw new Error('Please enter the order form link (https://…).');
         const shuttle = {
           ...s, id: uuid(), type: 'shuttle', firstName: '$5 Shuttle', airline: '', email: '', phone: '',
-          editKey: '', notified: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+          editKey: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
         };
         rides.push(shuttle);
         demoWrite(rides);
@@ -211,15 +180,6 @@
         await admin();
         demoWrite(rides.filter((x) => x.id !== payload.id));
         return { removed: true };
-      case 'adminSendMatches':
-        await admin();
-        return demoSendMatches();
-      case 'adminSettings': {
-        await admin();
-        const next = Object.assign(demoSettings(), payload.settings || {});
-        localStorage.setItem(DEMO_SETTINGS, JSON.stringify(next));
-        return { settings: next };
-      }
       default:
         throw new Error('Unknown action.');
     }
@@ -228,7 +188,7 @@
   const call = (payload) => (DEMO ? demo(payload) : remote(payload));
 
   window.CC = {
-    AIRPORTS, LOCATIONS, AIRLINES, MATCH_WINDOW_MIN, NOTIFY_OFFSETS, DEFAULT_NOTIFY, CONTACT_EMAIL, DEMO,
+    AIRPORTS, LOCATIONS, AIRLINES, MATCH_OFFSETS, DEFAULT_MATCH_WINDOW, CONTACT_EMAIL, DEMO,
     esc, pad, minutesOf, fmtTime, fmtMinutes, isoToMDY, mdyToIso, fmtDateLong, nowMinutes, todayIso,
     isMatch, placeOf, myRides, call,
   };
