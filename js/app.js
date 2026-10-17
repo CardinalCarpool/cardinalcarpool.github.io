@@ -331,12 +331,38 @@
   }
 
   // ---------- contacting a rider ----------
+  // Suggested meeting time: the midpoint of both times, rounded to 5 min, kept inside the overlap.
+  function bestTime(a, b, overlap) {
+    const mid = Math.round((minutesOf(a) + minutesOf(b)) / 2 / 5) * 5;
+    return Math.min(overlap.end, Math.max(overlap.start, mid));
+  }
+  const minsToLabel = (m) => fmtOverlap({ start: m, end: m });
+
+  // Text/email template. If one of your trips overlaps theirs, it says when you're leaving and
+  // proposes a time that works for both; otherwise it's a simple hello.
+  function contactMessage(r) {
+    const leaving = r.direction === 'to' ? 'leaving Stanford' : `leaving ${r.airport}`;
+    const theirs = `${fmtTime(r.time)} on ${fmtDateLong(r.date)}`;
+    const mine = upcomingMine()
+      .map((m) => ({ m, o: overlapOf(m, r) }))
+      .filter((x) => x.o)
+      .sort((x, y) => Math.abs(minutesOf(x.m) - minutesOf(r)) - Math.abs(minutesOf(y.m) - minutesOf(r)))[0];
+    if (!mine) {
+      return `Hi ${r.firstName}! Saw you're ${leaving} at ${theirs}. Interested in carpooling? (via Cardinal Carpool)`;
+    }
+    const myTime = minsToLabel(minutesOf(mine.m));
+    const meet = minsToLabel(bestTime(mine.m, r, mine.o));
+    const sameDate = mine.m.date === r.date;
+    return `Hi ${r.firstName}! Saw you're ${leaving} at ${theirs}. I'm leaving at ${myTime}${sameDate ? '' : ` on ${fmtDateLong(mine.m.date)}`}. ` +
+      `Are you interested in carpooling at ${meet}? - ${mine.m.firstName} (via Cardinal Carpool)`;
+  }
+
   function contactRider(r, how) {
     const where = r.direction === 'to' ? r.airport : 'Stanford';
-    const message = `Hi ${r.firstName}! Saw your ${r.airport} ride on ${fmtDateLong(r.date)} at ${fmtTime(r.time)} on Cardinal Carpool. Want to share a ride?`;
+    const message = contactMessage(r);
     const digits = (r.phone || '').replace(/[^0-9+]/g, '');
     const href = how === 'email'
-      ? `mailto:${r.email}?subject=${encodeURIComponent(`Cardinal Carpool: share a ride to ${where}?`)}&body=${encodeURIComponent(message)}`
+      ? `mailto:${r.email}?subject=${encodeURIComponent(`Carpool to ${where}?`)}&body=${encodeURIComponent(message)}`
       : `sms:${digits}?&body=${encodeURIComponent(message)}`;
     const value = how === 'email' ? r.email : r.phone;
     window.UI.openWithFallback(href, { name: r.firstName, how, value, message });
