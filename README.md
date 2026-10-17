@@ -2,6 +2,8 @@
 
 Find a Stanford student to share a ride to or from **SFO, SJC, or OAK**.
 
+**Live site:** https://cardinalcarpool.github.io · Admin: https://cardinalcarpool.github.io/admin.html
+
 - Students post their trip. They can check **Leaving Stanford**, **Returning to Stanford**, or both, and each trip gets its own airport, date, time, and airline. They also give a pickup/drop-off dorm, first name, and email and/or phone.
 - Everyone can filter rides by direction, airport, date (MM/DD/YYYY), dorm, and a time-of-day slider.
 - **Your matches** at the top of the page lists, for each trip you posted, the riders and shuttles going the same direction to the same airport whose times **overlap** yours. Each trip has its own flexibility: how much earlier and later you could leave. It defaults to 1 hr earlier / 15 min later for departures and 15 min earlier / 1 hr later for returns, up to 4.5 hours each way. For example, 8:00 with up to 1 hr later and 9:30 with up to 1 hr earlier match, because 8:30–9:00 works for both. Each match shows the shared time. Shuttles leave at a fixed time, so they match if that time is inside your range.
@@ -45,7 +47,7 @@ While `js/config.js` has no `API_URL`, the site runs in **demo mode**: rides are
    ```js
    window.CC_CONFIG = { API_URL: 'https://script.google.com/macros/s/XXXX/exec' };
    ```
-2. Commit and push. GitHub Pages serves the site from the `main` branch.
+2. Commit and push. GitHub Pages serves the site from the `main` branch at https://cardinalcarpool.github.io.
 
 ### Updating the backend later
 
