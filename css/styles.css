@@ -199,6 +199,17 @@ input[aria-invalid='true'] { border-color: var(--accent); }
 .editing .editing-banner { display: flex; }
 
 .label-note { font-weight: 400; color: var(--muted); }
+.check-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+@media (max-width: 420px) { .check-options { grid-template-columns: 1fr; } }
+.check-option {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-height: 44px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2);
+  font-weight: 600; font-size: 0.92rem; white-space: nowrap; transition: border-color 0.15s, background 0.15s;
+}
+.check-option input { width: 20px; height: 20px; margin: 0; flex-shrink: 0; accent-color: var(--cardinal); cursor: pointer; }
+.check-option:has(input:checked) { border-color: var(--cardinal); background: var(--cardinal-soft); }
+.check-option:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
+.check-option:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 .trip { border: 1px solid var(--border); border-left: 4px solid var(--cardinal); border-radius: 10px; padding: 12px 14px 2px; margin: 0 0 14px; min-width: 0; }
 .trip legend { font-weight: 700; font-size: 0.92rem; padding: 0 6px; margin-left: -6px; color: var(--accent); }
 #trip-from { border-left-color: var(--stanford-palo-alto); }

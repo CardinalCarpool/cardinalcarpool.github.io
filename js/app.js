@@ -30,14 +30,14 @@
   function syncDirections() {
     DIRS.forEach((d) => { $(`#trip-${d}`).hidden = !dirBox(d).checked; });
     const dirs = checkedDirs();
-    $('#locationLabel').textContent = dirs.length === 2 ? 'Your dorm (pickup & drop-off)'
+    $('#locationLabel').textContent = dirs.length !== 1 ? 'Your dorm (pickup & drop-off)'
       : dirs[0] === 'from' ? 'Drop-off location' : 'Pickup location';
     if (!editingId) $('#submitBtn').textContent = dirs.length === 2 ? 'Add my 2 rides' : 'Add my ride';
   }
   form.addEventListener('change', (e) => {
     if (e.target.name === 'dir') {
-      if (!checkedDirs().length) e.target.checked = true; // keep at least one
       syncDirections();
+      if (checkedDirs().length) $('#formError').textContent = '';
     }
     if (e.target.name === 'location') $('#otherField').hidden = form.location.value !== 'Other';
   });
@@ -65,6 +65,9 @@
   }
 
   function readForm() {
+    if (!checkedDirs().length) {
+      return [null, 'Check "Leaving Stanford", "Returning to Stanford", or both.', dirBox('to')];
+    }
     const trips = [];
     for (const d of checkedDirs()) {
       const [trip, err, field] = readTrip(d);
