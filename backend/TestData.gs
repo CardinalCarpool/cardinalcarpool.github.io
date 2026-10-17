@@ -67,6 +67,7 @@ function addTestRides_(count) {
     range.setNumberFormat('@');
     range.setValues(rows);
   } finally {
+    invalidateListCache_();
     lock.releaseLock();
   }
   Logger.log('Added ' + rows.length + ' test rides. Total rows now: ' + (sheet_().getLastRow() - 1));
@@ -91,6 +92,7 @@ function removeTestRides() {
     if (last >= firstEmpty) sh.deleteRows(firstEmpty, last - firstEmpty + 1);
     Logger.log('Removed ' + removed + ' test rides. Real rides kept: ' + keep.length);
   } finally {
+    invalidateListCache_();
     lock.releaseLock();
   }
 }

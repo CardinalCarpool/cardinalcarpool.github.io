@@ -45,6 +45,11 @@ function doPost(e) {
 
 function handle_(req) {
   try {
+    if (req.action === 'list') {
+      // Pre-serialized (and usually cached) so big lists don't get parsed and re-stringified.
+      return ContentService.createTextOutput('{"ok":true,"rides":' + listJson_() + '}')
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     return json_(Object.assign({ ok: true }, route_(req)));
   } catch (err) {
     return json_({ ok: false, error: String((err && err.message) || err) });
@@ -57,8 +62,6 @@ function json_(obj) {
 
 function route_(req) {
   switch (req.action) {
-    case 'list':
-      return { rides: readRides_().filter(isUpcoming_).map(publicRide_) };
     case 'add':
       return withLock_(() => addRide_(req.ride));
     case 'update':
@@ -83,14 +86,56 @@ function route_(req) {
   }
 }
 
+// Every write goes through here, so this is also where the cached ride list is cleared.
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
     return fn();
   } finally {
+    invalidateListCache_();
     lock.releaseLock();
   }
+}
+
+// ---------- Cached public ride list ----------
+// CacheService values max out at 100 KB, so the JSON is split into chunks.
+const LIST_CACHE_TTL = 300; // seconds; writes clear it immediately
+const LIST_CHUNK = 40000; // characters per chunk (safe under 100 KB even for non-ASCII)
+
+function listJson_() {
+  const cache = CacheService.getScriptCache();
+  const meta = cache.get('rides:meta');
+  if (meta) {
+    const { n, v } = JSON.parse(meta);
+    const keys = Array.from({ length: n }, (_, i) => 'rides:' + v + ':' + i);
+    const parts = cache.getAll(keys);
+    if (keys.every((k) => parts[k] != null)) return keys.map((k) => parts[k]).join('');
+  }
+  const json = JSON.stringify(readRides_().filter(isUpcoming_).map(compactRide_));
+  const v = Utilities.getUuid().slice(0, 8);
+  const chunks = {};
+  for (let i = 0; i * LIST_CHUNK < json.length; i++) chunks['rides:' + v + ':' + i] = json.slice(i * LIST_CHUNK, (i + 1) * LIST_CHUNK);
+  try {
+    cache.putAll(chunks, LIST_CACHE_TTL);
+    cache.put('rides:meta', JSON.stringify({ n: Object.keys(chunks).length, v }), LIST_CACHE_TTL);
+  } catch (err) {
+    // Too big to cache (or cache unavailable): still answer, just uncached.
+  }
+  return json;
+}
+
+function invalidateListCache_() {
+  CacheService.getScriptCache().remove('rides:meta');
+}
+
+/** Public ride without empty fields, to keep the list download small. */
+function compactRide_(r) {
+  const out = publicRide_(r);
+  Object.keys(out).forEach((k) => {
+    if (out[k] === '' || out[k] == null || k === 'createdAt') delete out[k];
+  });
+  return out;
 }
 
 // ---------- Auth ----------

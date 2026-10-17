@@ -437,17 +437,48 @@
   $('#matchesList').addEventListener('click', onListClick);
 
   // ---------- load ----------
+  // Last ride list, kept in this browser so return visits show rides instantly
+  // while the fresh list loads in the background.
+  const CACHE_KEY = 'cc_rides_cache';
+  const CACHE_MAX_AGE = 7 * 24 * 3600 * 1000;
+  function readCache() {
+    if (DEMO) return null;
+    try {
+      const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+      return c && Date.now() - c.at < CACHE_MAX_AGE && Array.isArray(c.rides) ? c.rides : null;
+    } catch (e) { return null; }
+  }
+  function writeCache(list) {
+    if (DEMO) return;
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), rides: list })); } catch (e) { /* full or blocked */ }
+  }
+
+  let showingCached = false;
   async function load() {
+    if (!rides.length) {
+      const cached = readCache();
+      if (cached) {
+        rides = cached;
+        showingCached = true;
+        render();
+        $('#count').textContent += ' · updating…';
+      }
+    }
     try {
       const res = await call({ action: 'list' });
       rides = res.rides || [];
+      showingCached = false;
+      writeCache(rides);
       // forget local edit keys for rides that are gone (removed by an admin or long past)
-      const mine = myRides.all();
-      Object.keys(mine).forEach((id) => {
-        if (!rides.some((r) => r.id === id)) myRides.remove(id);
-      });
+      const ids = new Set(rides.map((r) => r.id));
+      Object.keys(myRides.all()).forEach((id) => { if (!ids.has(id)) myRides.remove(id); });
       render();
     } catch (ex) {
+      if (showingCached) {
+        $('#count').textContent = $('#count').textContent.replace(' · updating…', ' · offline copy');
+        toast(`Couldn't refresh rides: ${ex.message}`, true);
+        return;
+      }
       listEl.innerHTML = `<div class="empty"><p><strong>Couldn't load rides.</strong><br>${esc(ex.message)}</p>
         <button class="btn btn-ghost btn-sm" type="button" id="retry">Try again</button></div>`;
       $('#retry').onclick = load;
