@@ -116,7 +116,7 @@
   function showContact({ name, how, value, message }) {
     const dlg = document.getElementById('shareDialog');
     const shown = how === 'email' ? value : fmtPhone(value);
-    const verb = how === 'email' ? 'Email' : how === 'text' ? 'Text' : 'Call';
+    const verb = how === 'email' ? 'Email' : 'Text';
     dlg.innerHTML = `
       <div class="dialog-body" style="position:relative">
         <button class="btn btn-ghost btn-sm dialog-close" type="button" aria-label="Close" data-close>✕</button>
@@ -126,10 +126,9 @@
           <input type="text" readonly value="${esc(shown)}" aria-label="${verb === 'Email' ? 'Email address' : 'Phone number'}">
           <button class="btn btn-primary" type="button" data-copy="${esc(value)}">Copy</button>
         </div>
-        ${how === 'call' ? '' : `
         <p class="count" style="margin:16px 0 6px">Suggested message</p>
         <textarea readonly rows="3" style="font-size:.9rem">${esc(message)}</textarea>
-        <button class="btn btn-ghost btn-sm" type="button" data-copy="${esc(message)}" style="margin-top:8px">Copy message</button>`}
+        <button class="btn btn-ghost btn-sm" type="button" data-copy="${esc(message)}" style="margin-top:8px">Copy message</button>
       </div>`;
     dlg.querySelector('[data-close]').onclick = () => dlg.close();
     dlg.querySelectorAll('[data-copy]').forEach((b) => {

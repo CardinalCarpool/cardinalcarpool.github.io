@@ -263,7 +263,6 @@
   const ICON = {
     mail: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>',
     text: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
-    call: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>',
   };
 
   // `overlap` (Your matches only): the time range that works for both riders.
@@ -291,7 +290,7 @@
       const btn = (how, icon, label) =>
         `<button class="btn btn-ghost btn-sm" type="button" data-contact="${how}" data-ride="${esc(r.id)}">${icon}${label}</button>`;
       if (r.email) actions += btn('email', ICON.mail, 'Email');
-      if (r.phone) actions += btn('text', ICON.text, 'Text') + btn('call', ICON.call, 'Call');
+      if (r.phone) actions += btn('text', ICON.text, 'Text');
     }
 
     const sub = r.type === 'shuttle'
@@ -338,7 +337,7 @@
     const digits = (r.phone || '').replace(/[^0-9+]/g, '');
     const href = how === 'email'
       ? `mailto:${r.email}?subject=${encodeURIComponent(`Cardinal Carpool: share a ride to ${where}?`)}&body=${encodeURIComponent(message)}`
-      : how === 'text' ? `sms:${digits}?&body=${encodeURIComponent(message)}` : `tel:${digits}`;
+      : `sms:${digits}?&body=${encodeURIComponent(message)}`;
     const value = how === 'email' ? r.email : r.phone;
     window.UI.openWithFallback(href, { name: r.firstName, how, value, message });
   }
