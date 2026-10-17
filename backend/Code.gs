@@ -14,12 +14,17 @@ const SHEET_NAME = 'Rides';
 const HEADERS = [
   'id', 'createdAt', 'updatedAt', 'type', 'direction', 'date', 'time', 'airport', 'airline',
   'location', 'locationOther', 'firstName', 'email', 'phone', 'notes', 'orderUrl', 'editKey',
+  'matchBefore', 'matchAfter',
 ];
 const AIRPORTS = ['SFO', 'SJC', 'OAK'];
 const DIRECTIONS = ['to', 'from']; // to = leaving Stanford for the airport, from = returning to Stanford
 const LOCATIONS = [
   'Branner', 'EV', 'FloMo', 'GovCo', 'Lagunita', 'Lower Row', 'Stern', 'Toyon', 'Upper Row', 'Wilbur', 'Other',
 ];
+// Each rider's match window: minutes before / after their time they're willing to share a ride.
+const MATCH_OFFSETS = [0, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270];
+const DEFAULT_MATCH_BEFORE = 60;
+const DEFAULT_MATCH_AFTER = 15;
 const TZ = 'America/Los_Angeles';
 
 // ---------- HTTP entry points ----------
@@ -108,6 +113,8 @@ function sheet_() {
     sh = ss.insertSheet(SHEET_NAME);
     sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold');
     sh.setFrozenRows(1);
+  } else if (sh.getRange(1, 1, 1, HEADERS.length).getDisplayValues()[0].join() !== HEADERS.join()) {
+    sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold'); // added columns
   }
   return sh;
 }
@@ -219,7 +226,15 @@ function validateRide_(input) {
     phone,
     notes: '',
     orderUrl: '',
+    matchBefore: offset_(r.matchBefore, DEFAULT_MATCH_BEFORE),
+    matchAfter: offset_(r.matchAfter, DEFAULT_MATCH_AFTER),
   };
+}
+
+function offset_(v, fallback) {
+  // Blank (rides posted before windows existed) or invalid → the default.
+  if (v === '' || v == null || MATCH_OFFSETS.indexOf(Number(v)) === -1) return String(fallback);
+  return String(Number(v));
 }
 
 function oneOf_(v, list, label) {
@@ -257,6 +272,9 @@ function publicRide_(r) {
     id: r.id, type: r.type, direction: r.direction, date: r.date, time: r.time, airport: r.airport,
     airline: r.airline, location: r.location, locationOther: r.locationOther, firstName: r.firstName,
     email: r.email, phone: r.phone, notes: r.notes, orderUrl: r.orderUrl, createdAt: r.createdAt,
+    // Public so each browser can check that a match goes both ways. Shuttles have no window.
+    matchBefore: r.type === 'rider' ? Number(offset_(r.matchBefore, DEFAULT_MATCH_BEFORE)) : null,
+    matchAfter: r.type === 'rider' ? Number(offset_(r.matchAfter, DEFAULT_MATCH_AFTER)) : null,
   };
 }
 

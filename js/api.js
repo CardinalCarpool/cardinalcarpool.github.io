@@ -9,8 +9,8 @@
     'Air Canada', 'Air France', 'British Airways', 'Emirates', 'Japan Airlines', 'Lufthansa', 'Qantas',
     'Other',
   ];
-  // "Your matches": rides from `before` minutes earlier to `after` minutes later than yours.
-  // Each poster can change this per ride; it's saved only in their browser.
+  // Match window: rides from `before` minutes earlier to `after` minutes later than yours.
+  // Each rider sets it per ride; it's stored with the ride so matches can be mutual.
   const MATCH_OFFSETS = [0, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270];
   const DEFAULT_MATCH_WINDOW = { before: 60, after: 15 };
   const CONTACT_EMAIL = 'sdesai05@stanford.edu';
@@ -75,6 +75,18 @@
     const diff = minutesOf(other) - minutesOf(mine);
     return diff >= -w.before && diff <= w.after;
   };
+  // A ride's own window (shuttles have none: they'll take anyone who fits your window).
+  const offsetOr = (v, fallback) => (v === '' || v == null || !MATCH_OFFSETS.includes(Number(v)) ? fallback : Number(v));
+  const windowOf = (r) => (r.type === 'shuttle' ? null : {
+    before: offsetOr(r.matchBefore, DEFAULT_MATCH_WINDOW.before),
+    after: offsetOr(r.matchAfter, DEFAULT_MATCH_WINDOW.after),
+  });
+  // Mutual: `other` is inside my window AND I'm inside theirs.
+  const isMutualMatch = (mine, other) => {
+    if (!isMatch(mine, other, windowOf(mine))) return false;
+    const theirs = windowOf(other);
+    return !theirs || isMatch(other, mine, theirs);
+  };
   const placeOf = (r) => (r.location === 'Other' ? (r.locationOther || 'Other') : r.location);
 
   // ---------- "my rides" (edit keys kept in this browser) ----------
@@ -83,9 +95,9 @@
     all() {
       try { return JSON.parse(localStorage.getItem(MINE_KEY) || '{}'); } catch (e) { return {}; }
     },
-    save(id, editKey, ride, window) {
+    save(id, editKey, ride) {
       const all = this.all();
-      all[id] = { editKey, ride, window: window || (all[id] && all[id].window) || DEFAULT_MATCH_WINDOW };
+      all[id] = { editKey, ride };
       try { localStorage.setItem(MINE_KEY, JSON.stringify(all)); } catch (e) { /* storage unavailable */ }
     },
     remove(id) {
@@ -94,7 +106,6 @@
       try { localStorage.setItem(MINE_KEY, JSON.stringify(all)); } catch (e) { /* storage unavailable */ }
     },
     get(id) { return this.all()[id] || null; },
-    window(id) { const m = this.get(id); return (m && m.window) || DEFAULT_MATCH_WINDOW; },
   };
 
   // ---------- remote backend ----------
@@ -124,6 +135,8 @@
   function demoValidate(r) {
     if (!r.email && !r.phone) throw new Error('Please add an email or phone number.');
     if (!r.firstName) throw new Error('Please enter your first name.');
+    r.matchBefore = offsetOr(r.matchBefore, DEFAULT_MATCH_WINDOW.before);
+    r.matchAfter = offsetOr(r.matchAfter, DEFAULT_MATCH_WINDOW.after);
     return r;
   }
   async function demo(payload) {
@@ -190,6 +203,6 @@
   window.CC = {
     AIRPORTS, LOCATIONS, AIRLINES, MATCH_OFFSETS, DEFAULT_MATCH_WINDOW, CONTACT_EMAIL, DEMO,
     esc, pad, minutesOf, fmtTime, fmtMinutes, isoToMDY, mdyToIso, fmtDateLong, nowMinutes, todayIso,
-    isMatch, placeOf, myRides, call,
+    isMatch, isMutualMatch, windowOf, placeOf, myRides, call,
   };
 })();

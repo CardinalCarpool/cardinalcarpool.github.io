@@ -2,7 +2,7 @@
 (function () {
   const {
     AIRLINES, DEMO, esc, minutesOf, fmtTime, fmtMinutes, isoToMDY, mdyToIso,
-    fmtDateLong, nowMinutes, todayIso, isMatch, placeOf, myRides, call,
+    fmtDateLong, nowMinutes, todayIso, isMutualMatch, windowOf, placeOf, myRides, call,
   } = window.CC;
   const { toast, initDateField, fillLocations } = window.UI;
 
@@ -75,6 +75,8 @@
       firstName: form.firstName.value.trim(),
       email: form.email.value.trim(),
       phone: form.phone.value.trim(),
+      matchBefore: Number(form.matchBefore.value),
+      matchAfter: Number(form.matchAfter.value),
     };
     if (!shared.location) return [null, 'Please choose a location.', form.location];
     if (shared.location === 'Other' && !shared.locationOther) return [null, 'Please say where for "Other".', form.locationOther];
@@ -101,15 +103,13 @@
     syncDirections();
   }
 
-  const readWindow = () => ({ before: Number(form.matchBefore.value), after: Number(form.matchAfter.value) });
-
   function startEdit(id) {
     const mine = myRides.get(id);
     if (!mine) return;
     const latest = rides.find((r) => r.id === id) || mine.ride;
     editingId = id;
     fillForm(latest);
-    const win = myRides.window(id);
+    const win = windowOf(latest);
     form.matchBefore.value = String(win.before);
     form.matchAfter.value = String(win.after);
     // A ride has one direction; to add the other trip, post it separately.
@@ -155,13 +155,13 @@
       if (editingId) {
         const mine = myRides.get(editingId);
         const res = await call({ action: 'update', id: editingId, editKey: mine.editKey, ride: trips[0] });
-        myRides.save(editingId, mine.editKey, res.ride, readWindow());
+        myRides.save(editingId, mine.editKey, res.ride);
         saved.push(res.ride);
         toast('Ride updated!');
       } else {
         for (const trip of trips) {
           const res = await call({ action: 'add', ride: trip });
-          myRides.save(res.ride.id, res.editKey, res.ride, readWindow());
+          myRides.save(res.ride.id, res.editKey, res.ride);
           saved.push(res.ride);
         }
         const what = saved.length === 2 ? 'Both rides added!' : 'Ride added!';
@@ -267,7 +267,7 @@
 
   function rideCard(r, mineList, inMatches) {
     const mine = !!myRides.get(r.id);
-    const matchesMine = !mine && !inMatches && mineList.some((m) => isMatch(m, r, myRides.window(m.id)));
+    const matchesMine = !mine && !inMatches && mineList.some((m) => isMutualMatch(m, r));
     const where = placeOf(r);
     const route = r.direction === 'to' ? `${esc(where)} → ${esc(r.airport)}` : `${esc(r.airport)} → ${esc(where)}`;
     const badges = [
@@ -341,9 +341,9 @@
     const cutoff = nowMinutes() - 60;
     let total = 0;
     $('#matchesList').innerHTML = mineList.map((m) => {
-      const win = myRides.window(m.id);
+      const win = windowOf(m);
       const matches = rides
-        .filter((r) => minutesOf(r) >= cutoff && isMatch(m, r, win))
+        .filter((r) => minutesOf(r) >= cutoff && isMutualMatch(m, r))
         .sort((x, y) => minutesOf(x) - minutesOf(y));
       total += matches.length;
       const where = placeOf(m);
@@ -364,6 +364,7 @@
     $('#matchesSub').textContent = total
       ? `${total} ride${total === 1 ? '' : 's'} near the trips you posted. Reach out to split the cost!`
       : 'Nobody near your trips yet. New rides show up here as people post.';
+    $('#matchesSub').title = 'Only riders whose own time window also includes your trip are shown.';
   }
 
   async function onListClick(e) {
