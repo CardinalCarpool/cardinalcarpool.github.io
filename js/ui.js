@@ -105,5 +105,64 @@
     if (e.target.closest('[data-share]')) openShare();
   });
 
-  window.UI = { toast, initDateField, fillLocations, openShare };
+  // ---------- Contact a rider ----------
+  const fmtPhone = (p) => {
+    const d = String(p || '').replace(/\D/g, '');
+    if (d.length === 10) return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+    if (d.length === 11 && d[0] === '1') return `+1 (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7)}`;
+    return p;
+  };
+
+  function showContact({ name, how, value, message }) {
+    const dlg = document.getElementById('shareDialog');
+    const shown = how === 'email' ? value : fmtPhone(value);
+    const verb = how === 'email' ? 'Email' : how === 'text' ? 'Text' : 'Call';
+    dlg.innerHTML = `
+      <div class="dialog-body" style="position:relative">
+        <button class="btn btn-ghost btn-sm dialog-close" type="button" aria-label="Close" data-close>✕</button>
+        <h2 id="shareTitle">${verb} ${esc(name)}</h2>
+        <p class="sub" style="color:var(--muted);margin:4px 0 14px">Couldn't open an app for this on your device. Contact ${esc(name)} at:</p>
+        <div class="share-link">
+          <input type="text" readonly value="${esc(shown)}" aria-label="${verb === 'Email' ? 'Email address' : 'Phone number'}">
+          <button class="btn btn-primary" type="button" data-copy="${esc(value)}">Copy</button>
+        </div>
+        ${how === 'call' ? '' : `
+        <p class="count" style="margin:16px 0 6px">Suggested message</p>
+        <textarea readonly rows="3" style="font-size:.9rem">${esc(message)}</textarea>
+        <button class="btn btn-ghost btn-sm" type="button" data-copy="${esc(message)}" style="margin-top:8px">Copy message</button>`}
+      </div>`;
+    dlg.querySelector('[data-close]').onclick = () => dlg.close();
+    dlg.querySelectorAll('[data-copy]').forEach((b) => {
+      b.onclick = async () => {
+        try { await navigator.clipboard.writeText(b.dataset.copy); toast('Copied!'); } catch (e) { /* select fallback */ }
+      };
+    });
+    dlg.onclick = (e) => { if (e.target === dlg) dlg.close(); };
+    if (!dlg.open) dlg.showModal();
+  }
+
+  // Tries to open the mail / messages / phone app. If the page never loses focus
+  // shortly after (no app picked it up), shows the contact details in a popup instead.
+  function openWithFallback(href, info) {
+    let left = false;
+    const markLeft = () => { left = true; };
+    const onVis = () => { if (document.hidden) left = true; };
+    window.addEventListener('blur', markLeft);
+    window.addEventListener('pagehide', markLeft);
+    document.addEventListener('visibilitychange', onVis);
+    const a = document.createElement('a');
+    a.href = href;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => {
+      window.removeEventListener('blur', markLeft);
+      window.removeEventListener('pagehide', markLeft);
+      document.removeEventListener('visibilitychange', onVis);
+      if (!left) showContact(info);
+    }, 1500);
+  }
+
+  window.UI = { toast, initDateField, fillLocations, openShare, openWithFallback, showContact };
 })();

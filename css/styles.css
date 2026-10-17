@@ -117,7 +117,8 @@ main { flex: 1; width: 100%; max-width: 1160px; margin: -48px auto 0; padding: 0
   box-shadow: var(--shadow);
   padding: 22px;
 }
-.card h2 { margin: 0 0 4px; font-family: var(--font-serif); font-size: 1.35rem; }
+.card h2 { margin: 0 0 14px; font-family: var(--font-serif); font-size: 1.35rem; }
+.card h2 + .sub { margin-top: -10px; }
 .card .sub { margin: 0 0 18px; color: var(--muted); font-size: 0.95rem; }
 .sticky { position: sticky; top: 16px; }
 @media (max-width: 900px) { .sticky { position: static; } }
@@ -215,6 +216,7 @@ input[aria-invalid='true'] { border-color: var(--accent); }
 
 /* ---------- your matches ---------- */
 .matches-card { margin-bottom: 24px; border-top: 4px solid var(--cardinal); }
+.matches-head h2 { margin-bottom: 4px; }
 .matches-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .match-trip { margin-top: 18px; }
 .match-trip-head {

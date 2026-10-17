@@ -263,6 +263,7 @@
   const ICON = {
     mail: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>',
     text: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+    call: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>',
   };
 
   // `overlap` (Your matches only): the time range that works for both riders.
@@ -286,19 +287,16 @@
       actions = `<button class="btn btn-ghost btn-sm" data-edit="${esc(r.id)}">Edit</button>
         <button class="btn btn-danger btn-sm" data-remove="${esc(r.id)}">Remove</button>`;
     } else {
-      const subject = encodeURIComponent(`Cardinal Carpool: share a ride to ${r.direction === 'to' ? r.airport : 'Stanford'}?`);
-      if (r.email) actions += `<a class="btn btn-ghost btn-sm" href="mailto:${esc(r.email)}?subject=${subject}" title="${esc(r.email)}">${ICON.mail}Email</a>`;
-      if (r.phone) {
-        const body = encodeURIComponent(`Hi ${r.firstName}! Saw your ${r.airport} ride on Cardinal Carpool. Want to share?`);
-        actions += `<a class="btn btn-ghost btn-sm" href="sms:${esc(r.phone.replace(/[^0-9+]/g, ''))}?&body=${body}" title="${esc(r.phone)}">${ICON.text}Text</a>`;
-      }
+      // Contact details stay hidden; the buttons open the right app (or a popup with the details).
+      const btn = (how, icon, label) =>
+        `<button class="btn btn-ghost btn-sm" type="button" data-contact="${how}" data-ride="${esc(r.id)}">${icon}${label}</button>`;
+      if (r.email) actions += btn('email', ICON.mail, 'Email');
+      if (r.phone) actions += btn('text', ICON.text, 'Text') + btn('call', ICON.call, 'Call');
     }
 
     const sub = r.type === 'shuttle'
       ? `${route}${r.notes ? ` · ${esc(r.notes)}` : ''}`
       : `${route} · ${esc(r.airline)}`;
-    const contact = r.type === 'shuttle' ? '' :
-      `<div class="ride-meta">${[r.email, r.phone].filter(Boolean).map(esc).join(' · ')}</div>`;
 
     return `<article class="ride${r.type === 'shuttle' ? ' shuttle' : ''}${mine ? ' mine' : ''}" data-id="${esc(r.id)}">
       <div class="ride-time">${esc(fmtTime(r.time))}<small>${r.direction === 'to' ? 'To' : 'From'} ${esc(r.airport)}</small></div>
@@ -306,7 +304,6 @@
         <div class="ride-name">${esc(r.type === 'shuttle' ? '$5 Shuttle' : r.firstName)} ${badges}</div>
         <div class="ride-meta">${sub}</div>
         ${overlap ? `<div class="ride-overlap">✓ Works for both: ${esc(fmtOverlap(overlap))}</div>` : ''}
-        ${contact}
       </div>
       <div class="ride-actions">${actions}</div>
     </article>`;
@@ -332,6 +329,18 @@
         <h3>${esc(fmtDateLong(d))} · ${esc(isoToMDY(d))}</h3>
         <div class="rides">${groups[d].map((r) => rideCard(r, mineList)).join('')}</div>
       </div>`).join('');
+  }
+
+  // ---------- contacting a rider ----------
+  function contactRider(r, how) {
+    const where = r.direction === 'to' ? r.airport : 'Stanford';
+    const message = `Hi ${r.firstName}! Saw your ${r.airport} ride on ${fmtDateLong(r.date)} at ${fmtTime(r.time)} on Cardinal Carpool. Want to share a ride?`;
+    const digits = (r.phone || '').replace(/[^0-9+]/g, '');
+    const href = how === 'email'
+      ? `mailto:${r.email}?subject=${encodeURIComponent(`Cardinal Carpool: share a ride to ${where}?`)}&body=${encodeURIComponent(message)}`
+      : how === 'text' ? `sms:${digits}?&body=${encodeURIComponent(message)}` : `tel:${digits}`;
+    const value = how === 'email' ? r.email : r.phone;
+    window.UI.openWithFallback(href, { name: r.firstName, how, value, message });
   }
 
   // ---------- your matches ----------
@@ -371,6 +380,12 @@
   }
 
   async function onListClick(e) {
+    const contactBtn = e.target.closest('[data-contact]');
+    if (contactBtn) {
+      const r = rides.find((x) => x.id === contactBtn.dataset.ride);
+      if (r) contactRider(r, contactBtn.dataset.contact);
+      return;
+    }
     const edit = e.target.closest('[data-edit]');
     const remove = e.target.closest('[data-remove]');
     if (edit) startEdit(edit.dataset.edit);
