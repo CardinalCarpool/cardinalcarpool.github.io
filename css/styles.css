@@ -199,12 +199,11 @@ input[aria-invalid='true'] { border-color: var(--accent); }
 .editing .editing-banner { display: flex; }
 
 .label-note { font-weight: 400; color: var(--muted); }
-.check-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-@media (max-width: 420px) { .check-options { grid-template-columns: 1fr; } }
+.check-options { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .check-option {
   display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-height: 44px; cursor: pointer;
   border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2);
-  font-weight: 600; font-size: 0.92rem; white-space: nowrap; transition: border-color 0.15s, background 0.15s;
+  font-weight: 600; font-size: 0.95rem; min-width: 0; transition: border-color 0.15s, background 0.15s;
 }
 .check-option input { width: 20px; height: 20px; margin: 0; flex-shrink: 0; accent-color: var(--cardinal); cursor: pointer; }
 .check-option:has(input:checked) { border-color: var(--cardinal); background: var(--cardinal-soft); }
@@ -220,6 +219,9 @@ input[aria-invalid='true'] { border-color: var(--accent); }
 .notify-box { border: 1px solid var(--border); background: var(--surface-2); border-radius: 10px; padding: 12px; margin-bottom: 16px; }
 .flex-box { margin-bottom: 14px; padding: 10px 12px; }
 .flex-box .label { display: block; font-weight: 600; font-size: 0.9rem; }
+.flex-pairs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.flex-pair { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; min-width: 0; }
+.flex-pair select { flex: 1; min-width: 0; min-height: 38px; padding: 6px 8px; }
 .ride-overlap { color: var(--success); font-weight: 600; font-size: 0.88rem; }
 .notify-window { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 0.92rem; flex-wrap: wrap; }
 .notify-window select { width: auto; min-height: 38px; padding: 6px 10px; }

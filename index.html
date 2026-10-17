@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=202610162152">
+  <link rel="stylesheet" href="css/styles.css?v=202610162154">
 </head>
 <body>
   <header class="site-header">
@@ -104,8 +104,8 @@
             </div>
             <div class="notify-box flex-box">
               <span class="label">🤝 I'm flexible: I could leave Stanford</span>
-              <div class="notify-window">
-                <select id="to_matchBefore" name="to_matchBefore" aria-label="How much earlier">
+              <div class="flex-pairs">
+                <label class="flex-pair"><select id="to_matchBefore" name="to_matchBefore" aria-label="How much earlier">
                   <option value="0">0 min</option>
                   <option value="15">15 min</option>
                   <option value="30">30 min</option>
@@ -118,9 +118,8 @@
                   <option value="210">3.5 hours</option>
                   <option value="240">4 hours</option>
                   <option value="270">4.5 hours</option>
-                </select>
-                <span>earlier to</span>
-                <select id="to_matchAfter" name="to_matchAfter" aria-label="How much later">
+                </select><span>earlier</span></label>
+                <label class="flex-pair"><select id="to_matchAfter" name="to_matchAfter" aria-label="How much later">
                   <option value="0">0 min</option>
                   <option value="15" selected>15 min</option>
                   <option value="30">30 min</option>
@@ -133,8 +132,7 @@
                   <option value="210">3.5 hours</option>
                   <option value="240">4 hours</option>
                   <option value="270">4.5 hours</option>
-                </select>
-                <span>later</span>
+                </select><span>later</span></label>
               </div>
             </div>
           </fieldset>
@@ -171,8 +169,8 @@
             </div>
             <div class="notify-box flex-box">
               <span class="label">🤝 I'm flexible: I could leave the airport</span>
-              <div class="notify-window">
-                <select id="from_matchBefore" name="from_matchBefore" aria-label="How much earlier">
+              <div class="flex-pairs">
+                <label class="flex-pair"><select id="from_matchBefore" name="from_matchBefore" aria-label="How much earlier">
                   <option value="0">0 min</option>
                   <option value="15" selected>15 min</option>
                   <option value="30">30 min</option>
@@ -185,9 +183,8 @@
                   <option value="210">3.5 hours</option>
                   <option value="240">4 hours</option>
                   <option value="270">4.5 hours</option>
-                </select>
-                <span>earlier to</span>
-                <select id="from_matchAfter" name="from_matchAfter" aria-label="How much later">
+                </select><span>earlier</span></label>
+                <label class="flex-pair"><select id="from_matchAfter" name="from_matchAfter" aria-label="How much later">
                   <option value="0">0 min</option>
                   <option value="15">15 min</option>
                   <option value="30">30 min</option>
@@ -200,8 +197,7 @@
                   <option value="210">3.5 hours</option>
                   <option value="240">4 hours</option>
                   <option value="270">4.5 hours</option>
-                </select>
-                <span>later</span>
+                </select><span>later</span></label>
               </div>
             </div>
           </fieldset>
@@ -310,10 +306,10 @@
   <dialog id="shareDialog" aria-labelledby="shareTitle"></dialog>
   <div class="toast-wrap" id="toasts" aria-live="polite"></div>
 
-  <script src="js/config.js?v=202610162152"></script>
-  <script src="js/api.js?v=202610162152"></script>
-  <script src="js/ui.js?v=202610162152"></script>
-  <script src="js/eggs.js?v=202610162152"></script>
-  <script src="js/app.js?v=202610162152"></script>
+  <script src="js/config.js?v=202610162154"></script>
+  <script src="js/api.js?v=202610162154"></script>
+  <script src="js/ui.js?v=202610162154"></script>
+  <script src="js/eggs.js?v=202610162154"></script>
+  <script src="js/app.js?v=202610162154"></script>
 </body>
 </html>
