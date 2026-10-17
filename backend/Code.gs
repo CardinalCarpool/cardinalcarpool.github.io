@@ -21,10 +21,10 @@ const DIRECTIONS = ['to', 'from']; // to = leaving Stanford for the airport, fro
 const LOCATIONS = [
   'Branner', 'EV', 'FloMo', 'GovCo', 'Lagunita', 'Lower Row', 'Stern', 'Toyon', 'Upper Row', 'Wilbur', 'Other',
 ];
-// Each rider's match window: minutes before / after their time they're willing to share a ride.
+// Each rider's flexibility: how much earlier / later than their time they could leave.
+// Two rides match when those ranges overlap. Defaults differ for departures and returns.
 const MATCH_OFFSETS = [0, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270];
-const DEFAULT_MATCH_BEFORE = 60;
-const DEFAULT_MATCH_AFTER = 15;
+const DEFAULT_WINDOW = { to: { before: 60, after: 15 }, from: { before: 15, after: 60 } };
 const TZ = 'America/Los_Angeles';
 
 // ---------- HTTP entry points ----------
@@ -213,8 +213,9 @@ function validateRide_(input) {
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Email looks invalid.');
   if (phone && !/^[0-9+().\-\s]{7,30}$/.test(phone)) throw new Error('Phone number looks invalid.');
   const location = oneOf_(r.location, LOCATIONS, 'location');
+  const direction = oneOf_(r.direction, DIRECTIONS, 'direction');
   return {
-    direction: oneOf_(r.direction, DIRECTIONS, 'direction'),
+    direction,
     date: validDate_(r.date),
     time: validTime_(r.time),
     airport: oneOf_(r.airport, AIRPORTS, 'airport'),
@@ -226,9 +227,13 @@ function validateRide_(input) {
     phone,
     notes: '',
     orderUrl: '',
-    matchBefore: offset_(r.matchBefore, DEFAULT_MATCH_BEFORE),
-    matchAfter: offset_(r.matchAfter, DEFAULT_MATCH_AFTER),
+    matchBefore: offset_(r.matchBefore, DEFAULT_WINDOW[direction].before),
+    matchAfter: offset_(r.matchAfter, DEFAULT_WINDOW[direction].after),
   };
+}
+
+function defaultWindow_(r) {
+  return DEFAULT_WINDOW[r.direction] || DEFAULT_WINDOW.to;
 }
 
 function offset_(v, fallback) {
@@ -272,9 +277,9 @@ function publicRide_(r) {
     id: r.id, type: r.type, direction: r.direction, date: r.date, time: r.time, airport: r.airport,
     airline: r.airline, location: r.location, locationOther: r.locationOther, firstName: r.firstName,
     email: r.email, phone: r.phone, notes: r.notes, orderUrl: r.orderUrl, createdAt: r.createdAt,
-    // Public so each browser can check that a match goes both ways. Shuttles have no window.
-    matchBefore: r.type === 'rider' ? Number(offset_(r.matchBefore, DEFAULT_MATCH_BEFORE)) : null,
-    matchAfter: r.type === 'rider' ? Number(offset_(r.matchAfter, DEFAULT_MATCH_AFTER)) : null,
+    // Public so each browser can check that two riders' flexible times overlap. Shuttles have none.
+    matchBefore: r.type === 'rider' ? Number(offset_(r.matchBefore, defaultWindow_(r).before)) : null,
+    matchAfter: r.type === 'rider' ? Number(offset_(r.matchAfter, defaultWindow_(r).after)) : null,
   };
 }
 

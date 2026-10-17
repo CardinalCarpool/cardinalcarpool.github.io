@@ -206,6 +206,9 @@ input[aria-invalid='true'] { border-color: var(--accent); }
 
 /* ---------- notify me ---------- */
 .notify-box { border: 1px solid var(--border); background: var(--surface-2); border-radius: 10px; padding: 12px; margin-bottom: 16px; }
+.flex-box { margin-bottom: 14px; padding: 10px 12px; }
+.flex-box .label { display: block; font-weight: 600; font-size: 0.9rem; }
+.ride-overlap { color: var(--success); font-weight: 600; font-size: 0.88rem; }
 .notify-window { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 0.92rem; flex-wrap: wrap; }
 .notify-window select { width: auto; min-height: 38px; padding: 6px 10px; }
 .notify-hint { margin: 8px 0 0; font-size: 0.82rem; color: var(--muted); }

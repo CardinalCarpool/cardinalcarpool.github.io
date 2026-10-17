@@ -2,7 +2,7 @@
 (function () {
   const {
     AIRLINES, DEMO, esc, minutesOf, fmtTime, fmtMinutes, isoToMDY, mdyToIso,
-    fmtDateLong, nowMinutes, todayIso, isMutualMatch, windowOf, placeOf, myRides, call,
+    fmtDateLong, nowMinutes, todayIso, isMutualMatch, overlapOf, fmtOverlap, windowOf, placeOf, myRides, call,
   } = window.CC;
   const { toast, initDateField, fillLocations } = window.UI;
 
@@ -54,6 +54,8 @@
       date,
       time: tripField(d, 'time').value,
       airline: tripField(d, 'airline').value.trim(),
+      matchBefore: Number(tripField(d, 'matchBefore').value),
+      matchAfter: Number(tripField(d, 'matchAfter').value),
     };
     if (!date) return [null, `Please enter the ${label} date as MM/DD/YYYY.`, dateEl];
     if (date < todayIso()) return [null, `The ${label} date is in the past.`, dateEl];
@@ -75,8 +77,6 @@
       firstName: form.firstName.value.trim(),
       email: form.email.value.trim(),
       phone: form.phone.value.trim(),
-      matchBefore: Number(form.matchBefore.value),
-      matchAfter: Number(form.matchAfter.value),
     };
     if (!shared.location) return [null, 'Please choose a location.', form.location];
     if (shared.location === 'Other' && !shared.locationOther) return [null, 'Please say where for "Other".', form.locationOther];
@@ -94,6 +94,9 @@
     tripField(r.direction, 'date').value = isoToMDY(r.date);
     tripField(r.direction, 'time').value = r.time;
     tripField(r.direction, 'airline').value = r.airline;
+    const win = windowOf(r);
+    tripField(r.direction, 'matchBefore').value = String(win.before);
+    tripField(r.direction, 'matchAfter').value = String(win.after);
     form.location.value = r.location;
     form.locationOther.value = r.locationOther || '';
     $('#otherField').hidden = r.location !== 'Other';
@@ -109,9 +112,6 @@
     const latest = rides.find((r) => r.id === id) || mine.ride;
     editingId = id;
     fillForm(latest);
-    const win = windowOf(latest);
-    form.matchBefore.value = String(win.before);
-    form.matchAfter.value = String(win.after);
     // A ride has one direction; to add the other trip, post it separately.
     DIRS.forEach((d) => { dirBox(d).disabled = d !== latest.direction; });
     $('#postCard').classList.add('editing');
@@ -265,7 +265,8 @@
     text: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
   };
 
-  function rideCard(r, mineList, inMatches) {
+  // `overlap` (Your matches only): the time range that works for both riders.
+  function rideCard(r, mineList, inMatches, overlap) {
     const mine = !!myRides.get(r.id);
     const matchesMine = !mine && !inMatches && mineList.some((m) => isMutualMatch(m, r));
     const where = placeOf(r);
@@ -304,6 +305,7 @@
       <div class="ride-main">
         <div class="ride-name">${esc(r.type === 'shuttle' ? '$5 Shuttle' : r.firstName)} ${badges}</div>
         <div class="ride-meta">${sub}</div>
+        ${overlap ? `<div class="ride-overlap">✓ Works for both: ${esc(fmtOverlap(overlap))}</div>` : ''}
         ${contact}
       </div>
       <div class="ride-actions">${actions}</div>
@@ -342,6 +344,7 @@
     let total = 0;
     $('#matchesList').innerHTML = mineList.map((m) => {
       const win = windowOf(m);
+      const flex = `${dur(win.before)} earlier to ${dur(win.after)} later`;
       const matches = rides
         .filter((r) => minutesOf(r) >= cutoff && isMutualMatch(m, r))
         .sort((x, y) => minutesOf(x) - minutesOf(y));
@@ -352,19 +355,19 @@
         <div class="match-trip-head">
           <div>
             <strong>${m.direction === 'to' ? '✈️ Your departure' : '🌲 Your return'} · ${esc(fmtDateLong(m.date))} · ${esc(fmtTime(m.time))}</strong>
-            <div class="count">${esc(route)} · ${matches.length} match${matches.length === 1 ? '' : 'es'} from ${dur(win.before)} before to ${dur(win.after)} after</div>
+            <div class="count">${esc(route)} · ${matches.length} match${matches.length === 1 ? '' : 'es'} · you're flexible ${flex}</div>
           </div>
           <button class="btn btn-ghost btn-sm" type="button" data-edit="${esc(m.id)}">Edit</button>
         </div>
         ${matches.length
-          ? `<div class="rides">${matches.map((r) => rideCard(r, mineList, true)).join('')}</div>`
+          ? `<div class="rides">${matches.map((r) => rideCard(r, mineList, true, overlapOf(m, r))).join('')}</div>`
           : '<p class="match-none">No matches yet. Check back soon, or share the site so more people post.</p>'}
       </div>`;
     }).join('');
     $('#matchesSub').textContent = total
       ? `${total} ride${total === 1 ? '' : 's'} near the trips you posted. Reach out to split the cost!`
       : 'Nobody near your trips yet. New rides show up here as people post.';
-    $('#matchesSub').title = 'Only riders whose own time window also includes your trip are shown.';
+    $('#matchesSub').title = 'Only riders whose flexible times overlap yours are shown.';
   }
 
   async function onListClick(e) {

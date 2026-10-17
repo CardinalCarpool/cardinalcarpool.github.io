@@ -12,7 +12,7 @@
   // Match window: rides from `before` minutes earlier to `after` minutes later than yours.
   // Each rider sets it per ride; it's stored with the ride so matches can be mutual.
   const MATCH_OFFSETS = [0, 15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270];
-  const DEFAULT_MATCH_WINDOW = { before: 60, after: 15 };
+  const DEFAULT_MATCH_WINDOW = { to: { before: 60, after: 15 }, from: { before: 15, after: 60 } };
   const CONTACT_EMAIL = 'sdesai05@stanford.edu';
 
   const API_URL = (window.CC_CONFIG && window.CC_CONFIG.API_URL || '').trim();
@@ -68,24 +68,35 @@
     const d = new Date(mins * 60000);
     return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
   };
-  // Does `other` fall inside `mine`'s match window (same direction and airport)?
+  const sameTrip = (a, b) => a.id !== b.id && a.direction === b.direction && a.airport === b.airport;
+  // Does `other` fall inside a fixed window around `mine`? (Used by the admin ±30 min export.)
   const isMatch = (mine, other, win) => {
-    if (other.id === mine.id || other.direction !== mine.direction || other.airport !== mine.airport) return false;
-    const w = win || DEFAULT_MATCH_WINDOW;
+    if (!sameTrip(mine, other)) return false;
     const diff = minutesOf(other) - minutesOf(mine);
-    return diff >= -w.before && diff <= w.after;
+    return diff >= -win.before && diff <= win.after;
   };
-  // A ride's own window (shuttles have none: they'll take anyone who fits your window).
+  // A rider's flexibility: how much earlier / later they could leave. Shuttles leave at a fixed time.
   const offsetOr = (v, fallback) => (v === '' || v == null || !MATCH_OFFSETS.includes(Number(v)) ? fallback : Number(v));
-  const windowOf = (r) => (r.type === 'shuttle' ? null : {
-    before: offsetOr(r.matchBefore, DEFAULT_MATCH_WINDOW.before),
-    after: offsetOr(r.matchAfter, DEFAULT_MATCH_WINDOW.after),
+  const defaultWindow = (r) => DEFAULT_MATCH_WINDOW[r.direction] || DEFAULT_MATCH_WINDOW.to;
+  const windowOf = (r) => (r.type === 'shuttle' ? { before: 0, after: 0 } : {
+    before: offsetOr(r.matchBefore, defaultWindow(r).before),
+    after: offsetOr(r.matchAfter, defaultWindow(r).after),
   });
-  // Mutual: `other` is inside my window AND I'm inside theirs.
-  const isMutualMatch = (mine, other) => {
-    if (!isMatch(mine, other, windowOf(mine))) return false;
-    const theirs = windowOf(other);
-    return !theirs || isMatch(other, mine, theirs);
+  // The range of times (in minutes) both rides could leave, or null if there's none.
+  const overlapOf = (a, b) => {
+    if (!sameTrip(a, b)) return null;
+    const wa = windowOf(a);
+    const wb = windowOf(b);
+    const start = Math.max(minutesOf(a) - wa.before, minutesOf(b) - wb.before);
+    const end = Math.min(minutesOf(a) + wa.after, minutesOf(b) + wb.after);
+    return start <= end ? { start, end } : null;
+  };
+  // A match: both riders' flexible times overlap, so there's a time that works for both.
+  const isMutualMatch = (mine, other) => !!overlapOf(mine, other);
+  // "8:30–9:00 AM" style label for an overlap.
+  const fmtOverlap = (o) => {
+    const t = (mins) => { const d = new Date(mins * 60000); return fmtTime(`${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`); };
+    return o.start === o.end ? t(o.start) : `${t(o.start)}–${t(o.end)}`;
   };
   const placeOf = (r) => (r.location === 'Other' ? (r.locationOther || 'Other') : r.location);
 
@@ -135,8 +146,8 @@
   function demoValidate(r) {
     if (!r.email && !r.phone) throw new Error('Please add an email or phone number.');
     if (!r.firstName) throw new Error('Please enter your first name.');
-    r.matchBefore = offsetOr(r.matchBefore, DEFAULT_MATCH_WINDOW.before);
-    r.matchAfter = offsetOr(r.matchAfter, DEFAULT_MATCH_WINDOW.after);
+    r.matchBefore = offsetOr(r.matchBefore, defaultWindow(r).before);
+    r.matchAfter = offsetOr(r.matchAfter, defaultWindow(r).after);
     return r;
   }
   async function demo(payload) {
@@ -203,6 +214,6 @@
   window.CC = {
     AIRPORTS, LOCATIONS, AIRLINES, MATCH_OFFSETS, DEFAULT_MATCH_WINDOW, CONTACT_EMAIL, DEMO,
     esc, pad, minutesOf, fmtTime, fmtMinutes, isoToMDY, mdyToIso, fmtDateLong, nowMinutes, todayIso,
-    isMatch, isMutualMatch, windowOf, placeOf, myRides, call,
+    isMatch, isMutualMatch, overlapOf, fmtOverlap, windowOf, placeOf, myRides, call,
   };
 })();
