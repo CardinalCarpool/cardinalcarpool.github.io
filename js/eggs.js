@@ -33,6 +33,8 @@
   let kIdx = 0;
   // 2/3. Typed words anywhere on the page
   let typed = '';
+  let typedRaw = ' '; // keeps word breaks, for whole-word eggs
+  const RICK_MSG = 'Thanks for never giving up on our service <3';
   const WORDS = {
     gobears: () => {
       document.querySelector('main').classList.add('shake');
@@ -57,6 +59,11 @@
       Object.keys(WORDS).forEach((w) => {
         if (typed.endsWith(w)) { typed = ''; WORDS[w](); }
       });
+      // "rick" as its own word (not "Patrick" or "brick")
+      typedRaw = (typedRaw + (/[a-z]/i.test(e.key) ? e.key.toLowerCase() : ' ')).slice(-16);
+      if (/(^|[^a-z])rick$/.test(typedRaw)) { typedRaw = ' '; toast(RICK_MSG); }
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      typedRaw += ' ';
     }
   });
 
@@ -93,7 +100,8 @@
       const name = (ride.firstName || '').trim().toLowerCase();
       const hour = parseInt((ride.time || '12').split(':')[0], 10);
       setTimeout(() => {
-        if (name === 'leland') toast('🎩 Welcome back, Mr. Stanford.');
+        if (name === 'rick' || name === 'richard') toast(RICK_MSG);
+        else if (name === 'leland') toast('🎩 Welcome back, Mr. Stanford.');
         else if (name === 'jane') toast('🎩 Welcome back, Mrs. Stanford.');
         else if (name === 'tree') { rain(['🌲'], 30); toast('🌲 The Tree needs a ride too.'); }
         else if (hour < 5) toast('🦉 Red-eye warrior! Hope you find a buddy.');
